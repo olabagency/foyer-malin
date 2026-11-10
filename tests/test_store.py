@@ -114,17 +114,60 @@ def test_event_defaults_and_occurrences(store):
         store.save_event({"title": "Sans date", "start": "bientôt"})
 
 
-def test_lists(store):
-    bag = store.save_list({"name": "Valise", "emoji": "🧳"})
-    entry = store.add_list_items(bag["id"], ["Maillot", "  ", "Crème solaire"])
-    assert [i["text"] for i in entry["items"]] == ["Maillot", "Crème solaire"]
-    first = entry["items"][0]["id"]
-    store.update_list_item(bag["id"], first, done=True)
-    with pytest.raises(KeyError):
-        store.update_list_item(bag["id"], "inconnu", done=True)
-    # Renommer la liste garde son contenu.
-    assert len(store.save_list({"id": bag["id"], "name": "Valise d'été"})["items"]) == 2
-    assert [i["text"] for i in store.delete_list_items(bag["id"])["items"]] == ["Crème solaire"]
+def test_lists_hold_tasks(store):
+    garden = store.save_list({"name": "Jardin", "emoji": "🍀"})
+    assert garden["color"].startswith("#")
+    mow = store.save_task({"title": "Tondre", "list_id": garden["id"], "due": "2026-11-14", "time": "8:35"})
+    assert (mow["list_id"], mow["time"]) == (garden["id"], "08:35")
+    # Une liste inconnue est ignorée ; une heure sans date aussi.
+    loose = store.save_task({"title": "Sans liste", "list_id": "inconnue", "time": "10:00"})
+    assert (loose["list_id"], loose["time"]) == (None, None)
+    # Renommer la liste garde ses tâches.
+    store.save_list({"id": garden["id"], "name": "Potager", "color": "#2f7fb8"})
+    assert store.tasks[mow["id"]]["list_id"] == garden["id"]
+
+    store.complete_task(mow["id"])
+    assert store.clear_done_tasks(list_id="autre") == 0
+    assert store.clear_done_tasks(list_id=garden["id"]) == 1
+
+    store.save_task({"title": "Arroser", "list_id": garden["id"]})
+    store.delete_list(garden["id"])
+    assert [t["title"] for t in store.tasks.values()] == ["Sans liste"]
+
+
+def test_tasks_sorted_by_date_then_time(store):
+    store.save_task({"title": "Soir", "due": "2020-01-01", "time": "18:00"})
+    store.save_task({"title": "Matin", "due": "2020-01-01", "time": "08:00"})
+    store.save_task({"title": "Journée", "due": "2020-01-01"})
+    assert [t["title"] for t in store.open_tasks()] == ["Journée", "Matin", "Soir"]
+
+
+async def test_old_list_items_become_tasks(hass, hass_storage):
+    from pytest_homeassistant_custom_component.common import MockConfigEntry  # noqa: PLC0415
+
+    from custom_components.foyer_malin.const import DOMAIN  # noqa: PLC0415
+
+    hass_storage["foyer_malin.data"] = {
+        "version": 1,
+        "minor_version": 1,
+        "key": "foyer_malin.data",
+        "data": {
+            "tasks": [{"id": "t1", "title": "Ancienne", "notes": "", "assignees": [], "due": None, "anchor": None,
+                       "recurrence": {"freq": "none", "interval": 1, "until": None}, "rotate": False, "points": 1,
+                       "done": False, "done_at": None, "done_by": None, "created_at": "2026-11-01T00:00:00+00:00"}],
+            "lists": [{"id": "l1", "name": "Valise", "emoji": "🧳",
+                       "items": [{"id": "i1", "text": "Maillot", "done": False}, {"id": "i2", "text": "Tongs", "done": True}]}],
+        },
+    }
+    entry = MockConfigEntry(domain=DOMAIN, data={})
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    store = entry.runtime_data.store
+    assert "items" not in store.lists["l1"] and store.lists["l1"]["color"].startswith("#")
+    tasks = {t["title"]: t for t in store.tasks.values()}
+    assert (tasks["Maillot"]["list_id"], tasks["Maillot"]["done"]) == ("l1", False)
+    assert tasks["Tongs"]["done"] is True
+    assert (tasks["Ancienne"]["list_id"], tasks["Ancienne"]["time"]) == (None, None)
 
 
 async def test_data_survives_a_restart(hass, entry, store):

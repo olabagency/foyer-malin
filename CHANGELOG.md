@@ -7,6 +7,22 @@ Toutes les évolutions notables sont listées ici. Les numéros de version suive
 - **mineure** (1.**1**.0) : nouvelles fonctions, vos données et réglages sont conservés ;
 - **majeure** (**2**.0.0) : changement important, lisez les notes avant de mettre à jour.
 
+## [0.2.0] – 2026-11-10
+
+### Modifié
+
+- 📋 **Les listes contiennent maintenant des tâches**, comme dans FamilyWall.
+  - Sommaire : une ligne par liste avec son icône, « Partagée », le nombre de tâches à faire et les retards en rouge. Bouton + pour créer une liste.
+  - Une liste ouverte : grand en-tête à sa couleur, champ « Ajouter » pour taper une tâche d'un coup, bouton + pour une tâche détaillée.
+  - Chaque tâche affiche son rond à cocher, sa date et son heure (en rouge si elle est passée), sa répétition (« Toutes les 2 semaines », « Tous les 3 jours ») et les avatars des membres. Les tâches terminées restent en bas, barrées.
+  - Chaque liste a une couleur au choix.
+- ⏰ **Heure facultative** sur les tâches, aussi dans la liste `todo.foyer_malin_taches` de Home Assistant.
+- L'onglet Tâches rappelle la liste de chaque tâche.
+
+### Mis à jour automatiquement
+
+- Les éléments des anciennes listes deviennent des tâches de ces listes, cochées ou non comme avant.
+
 ## [0.1.0] – 2026-11-10
 
 ### Ajouté

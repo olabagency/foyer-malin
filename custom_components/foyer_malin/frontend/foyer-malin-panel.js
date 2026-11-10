@@ -4,7 +4,7 @@
  * Les couleurs viennent du thème de Home Assistant (clair ou sombre).
  */
 
-const FOYER_VERSION = "0.1.0";
+const FOYER_VERSION = "0.2.0";
 
 /* ------------------------------------------------------------------ outils */
 
@@ -49,7 +49,8 @@ const FREQ_UNITS = { daily: ["jour", "jours"], weekly: ["semaine", "semaines"], 
 function recurrenceLabel(rec) {
   if (!rec || rec.freq === "none") return "";
   if ((rec.interval || 1) === 1) return FREQ_LABELS[rec.freq];
-  return `Tous les ${rec.interval} ${FREQ_UNITS[rec.freq][1]}`;
+  // « semaine » est féminin : « Toutes les 2 semaines », mais « Tous les 3 jours ».
+  return `${rec.freq === "weekly" ? "Toutes" : "Tous"} les ${rec.interval} ${FREQ_UNITS[rec.freq][1]}`;
 }
 
 /* Heure d'un événement : « 17:00 – 18:00 », « Journée », « Jusqu'au 16 nov. ». */
@@ -62,7 +63,17 @@ function eventTime(ev) {
 }
 
 const MEMBER_EMOJIS = ["🙂", "👩", "👨", "🧑", "👧", "👦", "👶", "👵", "👴", "🦸", "🧙", "🐶", "🐱", "🦊", "🐼", "🦄"];
-const LIST_EMOJIS = ["📝", "🧳", "🎁", "🎒", "🏡", "🔧", "🎉", "📚", "💊", "🌱", "🚗", "💡"];
+const LIST_EMOJIS = ["🏠", "🍀", "🐈‍⬛", "🧹", "🧺", "🧳", "🎁", "🎒", "🔧", "🚗", "💊", "📚", "🎉", "💡", "📝", "🐶"];
+
+const nowHM = () => {
+  const d = new Date();
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+};
+/* En retard : date passée, ou aujourd'hui à une heure déjà passée. */
+const isLate = (t, today = todayIso()) =>
+  !t.done && Boolean(t.due) && (t.due < today || (t.due === today && Boolean(t.time) && t.time < nowHM()));
+/* « Aujourd'hui, 18:00 », « Demain », « mer. 7 oct., 08:35 ». */
+const taskWhen = (t, today = todayIso()) => `${dayLabel(t.due, today)}${t.time ? `, ${t.time}` : ""}`;
 
 /* Logo de l'app : une maison avec un cœur (même dessin que l'icône de l'intégration). */
 const LOGO_SVG = `<svg class="logo" viewBox="0 0 64 64" aria-hidden="true">
@@ -200,19 +211,6 @@ label.field > span, .field-label { display: block; font-size: 13px; color: var(-
 .avs .av + .av { margin-left: -6px; }
 
 /* Tâches */
-.task { display: flex; align-items: center; gap: 4px; padding: 4px 12px 4px 4px; border-top: 1px solid var(--fm-divider); }
-.task:first-child { border-top: 0; }
-.check {
-  width: 44px; height: 44px; border: 0; background: none; flex-shrink: 0; color: var(--fm-text2);
-  display: inline-flex; align-items: center; justify-content: center;
-}
-.check ha-icon { --mdc-icon-size: 26px; }
-.check.done { color: var(--fm-success); }
-.task .body { flex: 1; min-width: 0; border: 0; background: none; text-align: left; padding: 6px 0; }
-.task .t { font-size: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.task.done .t { text-decoration: line-through; color: var(--fm-text2); }
-.task .m { font-size: 13px; color: var(--fm-text2); display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 1px; }
-.task .m .late { color: var(--fm-error); font-weight: 500; }
 .pts { font-size: 12px; font-weight: 600; color: var(--fm-warning); white-space: nowrap; }
 
 /* Agenda */
@@ -237,14 +235,54 @@ label.field > span, .field-label { display: block; font-size: 13px; color: var(-
 .ev.todo { border-left-color: var(--fm-divider); border-style: dashed; padding: 6px 12px; }
 .ev.todo ha-icon { --mdc-icon-size: 18px; color: var(--fm-text2); }
 
-/* Listes */
-.lists { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
-.list-card { text-align: left; background: var(--fm-card); border: 1px solid var(--fm-divider); border-radius: var(--fm-radius); padding: 14px; }
-.list-card .e { font-size: 30px; display: block; margin-bottom: 6px; }
-.list-card .t { font-weight: 500; font-size: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.list-card.new { border-style: dashed; color: var(--fm-primary); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; min-height: 108px; }
-.list-head { display: flex; align-items: center; gap: 6px; margin: -6px 0 12px -10px; }
-.list-head h2 { flex: 1; font-size: 22px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Listes (sommaire) */
+.page.flush { padding: 0 0 96px; max-width: 760px; }
+.lrows { background: var(--fm-card); border-bottom: 1px solid var(--fm-divider); }
+.lrow { display: flex; align-items: center; gap: 16px; width: 100%; text-align: left; border: 0; background: none; padding: 14px 16px; border-top: 1px solid var(--fm-divider); }
+.lrow:first-child { border-top: 0; }
+.lrow .le { font-size: 30px; width: 40px; text-align: center; flex-shrink: 0; }
+.lrow .t { font-size: 18px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lrow .m { display: flex; align-items: center; gap: 4px; font-size: 15px; color: var(--fm-text2); margin-top: 2px; }
+.lrow .m ha-icon { --mdc-icon-size: 17px; }
+.lrow .m .late { color: var(--fm-error); }
+.count { min-width: 40px; height: 40px; padding: 0 10px; border-radius: 20px; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center;
+  background: color-mix(in srgb, var(--fm-text) 8%, transparent); font-size: 19px; font-weight: 500; }
+
+/* Une liste ouverte */
+.lhero { position: relative; overflow: hidden; background: var(--lc); color: #fff; padding: 12px 16px 22px; min-height: 168px; display: flex; flex-direction: column; }
+.lhero-top { display: flex; align-items: center; gap: 10px; position: relative; z-index: 1; }
+.round { min-width: 46px; height: 46px; padding: 0 12px; border-radius: 23px; border: 0; background: #fff; color: #222; box-shadow: 0 2px 6px rgba(0,0,0,.18);
+  display: inline-flex; align-items: center; justify-content: center; gap: 4px; font-size: 17px; font-weight: 500; }
+.lhero h2 { position: relative; z-index: 1; margin-top: auto; font-size: 32px; font-weight: 600; max-width: 72%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lhero-art { position: absolute; right: -6px; bottom: -14px; font-size: 104px; line-height: 1; transform: rotate(-14deg); opacity: .9; filter: saturate(.85); }
+.lhero-count { position: absolute; right: 30px; bottom: 34px; width: 46px; height: 46px; border-radius: 50%; background: rgba(0,0,0,.45); color: #fff;
+  display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: 600; }
+.addrow { display: flex; align-items: center; gap: 14px; padding: 0 16px; background: var(--fm-card); border-bottom: 1px solid var(--fm-divider); }
+.addrow ha-icon { --mdc-icon-size: 26px; color: var(--fm-text2); width: 44px; justify-content: center; }
+.addrow input { flex: 1; min-width: 0; border: 0; outline: none; background: none; font-size: 18px; padding: 18px 0; }
+.lclear { display: block; margin: 12px auto 0; }
+
+/* Tâche (même allure partout) */
+.trows { background: var(--fm-card); }
+.card.flush .trows, .trows.inset { background: none; }
+.trow { display: flex; align-items: center; gap: 2px; padding: 4px 16px 4px 4px; }
+.tcheck { width: 52px; height: 52px; border: 0; background: none; flex-shrink: 0; color: var(--fm-text2); display: inline-flex; align-items: center; justify-content: center; }
+.tcheck ha-icon { --mdc-icon-size: 30px; }
+.trow.done .tcheck { color: var(--lc, var(--fm-success)); }
+.tbody { flex: 1; min-width: 0; border: 0; background: none; text-align: left; padding: 8px 0; }
+.tbody .t { font-size: 18px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.trow.done .t { text-decoration: line-through; color: var(--fm-text2); }
+.tbody .m { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 12px; font-size: 15px; color: var(--fm-text2); margin-top: 3px; }
+.tbody .m span { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+.tbody .m ha-icon { --mdc-icon-size: 18px; }
+.tbody .m .late { color: var(--fm-error); }
+.trow .avs .av { width: 34px; height: 34px; font-size: 18px; border-width: 2px; }
+.trow .avs .av + .av { margin-left: -12px; }
+
+.fab { position: absolute; right: 18px; bottom: calc(var(--fm-nav-h) + 18px + env(safe-area-inset-bottom)); z-index: 6;
+  width: 64px; height: 64px; border-radius: 50%; border: 0; background: var(--lc, var(--fm-primary)); color: #fff;
+  display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 14px rgba(0,0,0,.28); }
+.fab ha-icon { --mdc-icon-size: 32px; }
 
 /* Famille */
 .member { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; padding: 10px 12px; margin-bottom: 8px;
@@ -478,11 +516,17 @@ class FoyerMalinPanel extends HTMLElement {
   _openTasks() {
     return this.s.data.tasks
       .filter((t) => !t.done)
-      .sort((a, b) => (a.due || "9999").localeCompare(b.due || "9999") || a.created_at.localeCompare(b.created_at));
+      .sort((a, b) => (a.due || "9999").localeCompare(b.due || "9999") || (a.time || "").localeCompare(b.time || "") || a.created_at.localeCompare(b.created_at));
   }
   /* Tâches à faire aujourd'hui, retards compris (pastille de l'onglet, accueil). */
   _dueTasks() {
     return this._openTasks().filter((t) => t.due && t.due <= this.today);
+  }
+  _listTasks(listId) {
+    return this.s.data.tasks.filter((t) => t.list_id === listId);
+  }
+  _listColor(list) {
+    return safeColor(list && list.color);
   }
 
   /* ---------------- champs de saisie */
@@ -590,8 +634,21 @@ class FoyerMalinPanel extends HTMLElement {
         break;
       }
       case "task-new":
-        this._openTask({ due: d.due || null, assignees: s.taskFilter === "all" || s.tab !== "tasks" ? [] : [s.taskFilter] });
+        this._openTask({
+          due: d.due || null,
+          list_id: s.tab === "lists" ? s.listId : null,
+          assignees: s.taskFilter === "all" || s.tab !== "tasks" ? [] : [s.taskFilter],
+        });
         break;
+      case "list-task-quick": {
+        const input = this.shadowRoot.getElementById("list-quick");
+        const title = input.value.trim();
+        if (!title) return input.focus();
+        input.value = "";
+        await this._call("tasks/save", { task: { title, list_id: s.listId } });
+        input.focus();
+        break;
+      }
       case "task-open":
         this._openTask(s.data.tasks.find((t) => t.id === d.id));
         break;
@@ -636,6 +693,7 @@ class FoyerMalinPanel extends HTMLElement {
         const recurrence = { freq: f.freq, interval: Number(f.interval) || 1 };
         const task = {
           id: f.id, title: f.title, notes: f.notes, assignees: f.assignees, due: f.due || null,
+          time: (f.due && f.time) || null, list_id: f.list_id || null,
           recurrence, rotate: Boolean(f.rotate), points: Number(f.points),
         };
         if (await this._call("tasks/save", { task })) this._dispatch("close");
@@ -694,13 +752,17 @@ class FoyerMalinPanel extends HTMLElement {
         s.listId = null;
         this._render();
         break;
-      case "list-new":
-        s.stack.push({ type: "list", draft: { id: null, name: "", emoji: LIST_EMOJIS[0] } });
+      case "list-new": {
+        const colors = s.config.list_colors;
+        const used = new Set(s.data.lists.map((l) => l.color));
+        const color = colors.find((c) => !used.has(c)) || colors[s.data.lists.length % colors.length];
+        s.stack.push({ type: "list", draft: { id: null, name: "", emoji: LIST_EMOJIS[0], color } });
         this._renderOverlay(true);
         break;
+      }
       case "list-edit": {
         const list = this._list(s.listId);
-        s.stack.push({ type: "list", draft: { id: list.id, name: list.name, emoji: list.emoji } });
+        s.stack.push({ type: "list", draft: { id: list.id, name: list.name, emoji: list.emoji, color: list.color } });
         this._renderOverlay(true);
         break;
       }
@@ -716,31 +778,20 @@ class FoyerMalinPanel extends HTMLElement {
       }
       case "list-delete": {
         const list = this._list(top.draft.id);
-        if (await this._confirm({ title: "Supprimer la liste ?", message: `« ${list.name} » et son contenu seront supprimés.` })) {
+        const count = this._listTasks(list.id).length;
+        const message = `« ${list.name} »${count ? ` et ses ${plural(count, "tâche")}` : ""} ${count ? "seront supprimées" : "sera supprimée"}.`;
+        if (await this._confirm({ title: "Supprimer la liste ?", message })) {
           s.listId = null;
           await this._call("lists/delete", { list_id: list.id });
           this._dispatch("close");
         }
         break;
       }
-      case "item-quick": {
-        const input = this.shadowRoot.getElementById("item-quick");
-        // « pull, chaussettes, brosse à dents » : plusieurs éléments d'un coup.
-        const texts = input.value.split(/[,\n]/).map((t) => t.trim()).filter(Boolean);
-        if (!texts.length) return input.focus();
-        input.value = "";
-        await this._call("lists/items/add", { list_id: s.listId, texts: texts.slice(0, 50) });
+      case "list-clear-done": {
+        const res = await this._call("tasks/clear_done", { list_id: s.listId });
+        if (res) this._toast(`${plural(res.removed, "tâche")} terminée${res.removed > 1 ? "s" : ""} effacée${res.removed > 1 ? "s" : ""}`);
         break;
       }
-      case "item-toggle":
-        await this._call("lists/items/update", { list_id: s.listId, item_id: d.id, done: d.done !== "1" });
-        break;
-      case "item-delete":
-        await this._call("lists/items/delete", { list_id: s.listId, item_ids: [d.id] });
-        break;
-      case "items-clear":
-        await this._call("lists/items/delete", { list_id: s.listId });
-        break;
 
       /* ---- famille et réglages */
       case "member-new": {
@@ -814,7 +865,8 @@ class FoyerMalinPanel extends HTMLElement {
       type: "task",
       draft: {
         id: task.id || null, title: task.title || "", notes: task.notes || "", assignees: [...(task.assignees || [])],
-        due: task.due || "", freq: rec.freq, interval: rec.interval, rotate: Boolean(task.rotate), points: task.points ?? 1,
+        due: task.due || "", time: task.time || "", list_id: task.list_id || "",
+        freq: rec.freq, interval: rec.interval, rotate: Boolean(task.rotate), points: task.points ?? 1,
       },
     });
     this._renderOverlay(true);
@@ -876,7 +928,7 @@ class FoyerMalinPanel extends HTMLElement {
     }
     requestAnimationFrame(() => this._fitHeight());
     if (!root.querySelector(".app")) {
-      root.innerHTML = `<style>${STYLES}</style><div class="app"><div id="header"></div><main id="main"></main><nav class="tabs" id="nav"></nav><div id="overlay"></div><div id="toast"></div><div id="dialog"></div></div>`;
+      root.innerHTML = `<style>${STYLES}</style><div class="app"><div id="header"></div><main id="main"></main><div id="fab"></div><nav class="tabs" id="nav"></nav><div id="overlay"></div><div id="toast"></div><div id="dialog"></div></div>`;
     }
     const main = root.getElementById("main");
     // Une mise à jour venue d'un autre appareil ne doit ni faire sauter la page ni vider un champ en cours de saisie.
@@ -885,7 +937,9 @@ class FoyerMalinPanel extends HTMLElement {
     const typing = active && active.id && main.contains(active) ? { id: active.id, value: active.value } : null;
     this._tabChanged = false;
     root.getElementById("header").innerHTML = this._tplHeader();
-    main.innerHTML = `<div class="page">${this.s.data ? this._tplTab() : `<div class="empty">Chargement…</div>`}</div>`;
+    const flush = this.s.data && this.s.tab === "lists";
+    main.innerHTML = `<div class="page ${flush ? "flush" : ""}">${this.s.data ? this._tplTab() : `<div class="empty">Chargement…</div>`}</div>`;
+    root.getElementById("fab").innerHTML = this.s.data ? this._tplFab() : "";
     main.scrollTop = scroll;
     if (typing) {
       const again = root.getElementById(typing.id);
@@ -973,23 +1027,29 @@ class FoyerMalinPanel extends HTMLElement {
     return found.length ? `<span class="avs">${found.map((m) => this._av(m, size)).join("")}</span>` : "";
   }
 
-  _tplTask(task) {
+  /* Une tâche, comme dans une liste : rond à cocher, titre, date (rouge si en retard), répétition, membres. */
+  _tplTask(task, { showList = false, showPoints = true } = {}) {
     const today = this.today;
-    const late = task.due && task.due < today && !task.done;
     const who = task.assignees.map((id) => this._member(id)).filter(Boolean);
+    const list = showList && task.list_id ? this._list(task.list_id) : null;
     const meta = [];
-    if (task.due && !task.done) meta.push(`<span class="${late ? "late" : ""}">${late ? "En retard · " : ""}${esc(dayLabel(task.due, today))}</span>`);
-    if (task.recurrence.freq !== "none") meta.push(`<span>🔁 ${esc(recurrenceLabel(task.recurrence))}</span>`);
-    if (task.rotate && who.length > 1) meta.push(`<span>Au tour de ${esc(who[0].name)}</span>`);
+    if (task.due) meta.push(`<span class="${isLate(task, today) ? "late" : ""}">${icon("calendar-blank-outline")}${esc(taskWhen(task, today))}</span>`);
+    if (task.recurrence.freq !== "none" && !task.done) meta.push(`<span>${icon("repeat")}${esc(recurrenceLabel(task.recurrence))}</span>`);
+    if (task.rotate && who.length > 1 && !task.done) meta.push(`<span>Au tour de ${esc(who[0].name)}</span>`);
+    if (list) meta.push(`<span>${esc(list.emoji)} ${esc(list.name)}</span>`);
     if (task.done && task.done_by && this._member(task.done_by)) meta.push(`<span>Fait par ${esc(this._member(task.done_by).name)}</span>`);
-    const points = this.s.data.settings.points && task.points ? `<span class="pts">+${task.points} ⭐</span>` : "";
-    return `<div class="task ${task.done ? "done" : ""}">
-      <button class="check ${task.done ? "done" : ""}" data-action="task-toggle" data-id="${task.id}" role="checkbox" aria-checked="${task.done}" aria-label="${task.done ? "Remettre à faire" : "Terminer"} : ${esc(task.title)}">${icon(task.done ? "check-circle" : "circle-outline")}</button>
-      <button class="body" data-action="task-open" data-id="${task.id}">
+    const points = showPoints && this.s.data.settings.points && task.points && !task.done ? `<span class="pts">+${task.points} ⭐</span>` : "";
+    return `<div class="trow ${task.done ? "done" : ""}">
+      <button class="tcheck" data-action="task-toggle" data-id="${task.id}" role="checkbox" aria-checked="${task.done}" aria-label="${task.done ? "Remettre à faire" : "Terminer"} : ${esc(task.title)}">${icon(task.done ? "check-circle" : "circle-outline")}</button>
+      <button class="tbody" data-action="task-open" data-id="${task.id}">
         <div class="t">${esc(task.title)}</div>${meta.length ? `<div class="m">${meta.join("")}</div>` : ""}
       </button>
       ${points}${this._avs(task.rotate ? task.assignees.slice(0, 1) : task.assignees)}
     </div>`;
+  }
+
+  _tplRows(tasks, opts) {
+    return `<div class="trows">${tasks.map((t) => this._tplTask(t, opts)).join("")}</div>`;
   }
 
   _tplEvent(ev, showDay = false) {
@@ -1019,7 +1079,7 @@ class FoyerMalinPanel extends HTMLElement {
       <div class="sec"><h3>Aujourd'hui</h3><button class="btn text" data-action="event-new">${icon("plus")} Événement</button></div>
       ${todayEvents.length ? todayEvents.map((e) => `<div style="margin-bottom:6px">${this._tplEvent(e)}</div>`).join("") : `<p class="sub">Rien de prévu dans l'agenda.</p>`}
       <div class="sec"><h3>À faire</h3><button class="btn text" data-action="task-new" data-due="${this.today}">${icon("plus")} Tâche</button></div>
-      ${due.length ? `<div class="card flush">${due.map((t) => this._tplTask(t)).join("")}</div>` : `<p class="sub">Tout est fait.</p>`}
+      ${due.length ? `<div class="card flush">${this._tplRows(due, { showList: true })}</div>` : `<p class="sub">Tout est fait.</p>`}
       ${nextEvents.length ? `<div class="sec"><h3>Dans les prochains jours</h3></div>${nextEvents.map((e) => `<div style="margin-bottom:6px">${this._tplEvent(e, true)}</div>`).join("")}` : ""}
       ${this._tplScores()}`;
   }
@@ -1057,7 +1117,7 @@ class FoyerMalinPanel extends HTMLElement {
       const due = tasks.filter((t) => t.due === day);
       const items = [
         ...events.map((e) => this._tplEvent(e)),
-        ...due.map((t) => `<button class="ev todo" data-action="task-open" data-id="${t.id}">${icon("checkbox-blank-circle-outline")}<span class="grow"><div class="m" style="color:var(--fm-text)">${esc(t.title)}</div></span>${this._avs(t.assignees)}</button>`),
+        ...due.map((t) => `<button class="ev todo" data-action="task-open" data-id="${t.id}">${icon("checkbox-blank-circle-outline")}<span class="grow"><div class="m" style="color:var(--fm-text)">${t.time ? `${esc(t.time)} · ` : ""}${esc(t.title)}</div></span>${this._avs(t.assignees)}</button>`),
       ];
       days.push(`<div class="day ${day === today ? "today" : day < today ? "past" : ""}">
         <button class="date" data-action="event-new" data-date="${day}" aria-label="Ajouter un événement ${esc(fmtDay(day))}"><span class="w">${esc(fmtDay(day, { weekday: "short" }).replace(".", ""))}</span><span class="n">${parseIso(day).getDate()}</span></button>
@@ -1085,8 +1145,8 @@ class FoyerMalinPanel extends HTMLElement {
     const done = data.tasks.filter((t) => t.done && mine(t)).sort((a, b) => (b.done_at || "").localeCompare(a.done_at || ""));
     const weekEnd = addDays(today, 7);
     const groups = [
-      ["En retard", open.filter((t) => t.due && t.due < today), "late"],
-      ["Aujourd'hui", open.filter((t) => t.due === today)],
+      ["En retard", open.filter((t) => isLate(t, today)), "late"],
+      ["Aujourd'hui", open.filter((t) => t.due === today && !isLate(t, today))],
       ["Cette semaine", open.filter((t) => t.due && t.due > today && t.due <= weekEnd)],
       ["Plus tard", open.filter((t) => t.due && t.due > weekEnd)],
       ["Sans date", open.filter((t) => !t.due)],
@@ -1099,37 +1159,62 @@ class FoyerMalinPanel extends HTMLElement {
     return `${chips}
       <div class="quick"><input class="input" id="task-quick" placeholder="Ajouter une tâche…" data-enter="task-quick" enterkeyhint="done" aria-label="Nouvelle tâche">
         <button class="btn tonal" data-action="task-new" aria-label="Nouvelle tâche détaillée">${icon("tune-variant")}</button></div>
-      ${groups.map(([label, list, cls]) => `<div class="sec"><h3 class="${cls || ""}">${label} · ${list.length}</h3></div><div class="card flush">${list.map((t) => this._tplTask(t)).join("")}</div>`).join("")}
+      ${groups.map(([label, list, cls]) => `<div class="sec"><h3 class="${cls || ""}">${label} · ${list.length}</h3></div><div class="card flush">${this._tplRows(list, { showList: true })}</div>`).join("")}
       ${!open.length ? `<div class="empty"><span class="big">✨</span>Aucune tâche à faire${filter === "all" ? "" : ` pour ${esc(this._member(filter).name)}`}.</div>` : ""}
-      ${done.length ? `<div class="sec"><button class="btn text" data-action="done-toggle">${icon(this.s.showDone ? "chevron-down" : "chevron-right")} Terminées · ${done.length}</button><span class="grow"></span>${this.s.showDone ? `<button class="btn danger" data-action="done-clear">Effacer</button>` : ""}</div>${this.s.showDone ? `<div class="card flush">${done.map((t) => this._tplTask(t)).join("")}</div>` : ""}` : ""}`;
+      ${done.length ? `<div class="sec"><button class="btn text" data-action="done-toggle">${icon(this.s.showDone ? "chevron-down" : "chevron-right")} Terminées · ${done.length}</button><span class="grow"></span>${this.s.showDone ? `<button class="btn danger" data-action="done-clear">Effacer</button>` : ""}</div>${this.s.showDone ? `<div class="card flush">${this._tplRows(done, { showList: true })}</div>` : ""}` : ""}`;
   }
 
   /* ---- listes */
 
   _tplLists() {
-    const lists = this.s.data.lists;
-    return `<div class="lists">${lists
+    const lists = [...this.s.data.lists].sort((a, b) => (a.created_at || "").localeCompare(b.created_at || ""));
+    if (!lists.length) {
+      return `<div class="empty" style="padding-top:48px"><span class="big">📋</span><h2>Vos listes</h2>
+        <p style="margin-top:8px">Tâches ménagères, jardin, le chat… une liste partagée par toute la famille, avec des tâches datées, répétées et attribuées.</p>
+        <button class="btn" data-action="list-new">${icon("plus")} Créer une liste</button></div>`;
+    }
+    return `<div class="lrows">${lists
       .map((l) => {
-        const left = l.items.filter((i) => !i.done).length;
-        return `<button class="list-card" data-action="list-open" data-id="${l.id}"><span class="e">${esc(l.emoji)}</span><div class="t">${esc(l.name)}</div><div class="sub">${l.items.length ? (left ? `${left} restant${left > 1 ? "s" : ""}` : "Tout est coché") : "Vide"}</div></button>`;
+        const open = this._listTasks(l.id).filter((t) => !t.done);
+        const late = open.filter((t) => isLate(t, this.today)).length;
+        return `<button class="lrow" data-action="list-open" data-id="${l.id}"><span class="le">${esc(l.emoji)}</span>
+          <span class="grow"><div class="t">${esc(l.name)}</div>
+            <div class="m">${icon("account-multiple-outline")}Partagée${late ? `<span class="late">&nbsp;· ${late} en retard</span>` : ""}</div></span>
+          <span class="count" aria-label="${plural(open.length, "tâche")} à faire">${open.length}</span></button>`;
       })
-      .join("")}<button class="list-card new" data-action="list-new">${icon("plus")}<span>Nouvelle liste</span></button></div>
-      ${lists.length ? "" : `<p class="sub" style="margin-top:16px;text-align:center">Valise des vacances, idées cadeaux, travaux à prévoir… une liste partagée par toute la famille.</p>`}`;
+      .join("")}</div>`;
   }
 
   _tplList(list) {
-    const todo = list.items.filter((i) => !i.done);
-    const done = list.items.filter((i) => i.done);
-    const row = (i) => `<div class="task ${i.done ? "done" : ""}">
-      <button class="check ${i.done ? "done" : ""}" data-action="item-toggle" data-id="${i.id}" data-done="${i.done ? 1 : 0}" role="checkbox" aria-checked="${i.done}" aria-label="${esc(i.text)}">${icon(i.done ? "check-circle" : "circle-outline")}</button>
-      <button class="body" data-action="item-toggle" data-id="${i.id}" data-done="${i.done ? 1 : 0}"><div class="t">${esc(i.text)}</div></button>
-      <button class="icon-btn small" data-action="item-delete" data-id="${i.id}" aria-label="Retirer ${esc(i.text)}">${icon("close")}</button></div>`;
-    return `<div class="list-head"><button class="icon-btn" data-action="list-back" aria-label="Retour aux listes">${icon("arrow-left")}</button>
-        <h2>${esc(list.emoji)} ${esc(list.name)}</h2><button class="icon-btn" data-action="list-edit" aria-label="Modifier la liste">${icon("pencil-outline")}</button></div>
-      <div class="quick"><input class="input" id="item-quick" placeholder="Ajouter (séparez par des virgules)…" data-enter="item-quick" enterkeyhint="done" aria-label="Nouvel élément">
-        <button class="btn tonal" data-action="item-quick" aria-label="Ajouter">${icon("plus")}</button></div>
-      ${todo.length ? `<div class="card flush">${todo.map(row).join("")}</div>` : `<div class="empty">${list.items.length ? "Tout est coché 🎉" : "La liste est vide."}</div>`}
-      ${done.length ? `<div class="sec"><h3>Cochés · ${done.length}</h3><button class="btn danger" data-action="items-clear">Retirer</button></div><div class="card flush">${done.map(row).join("")}</div>` : ""}`;
+    const tasks = this._listTasks(list.id);
+    const open = tasks
+      .filter((t) => !t.done)
+      .sort((a, b) => (a.due || "9999").localeCompare(b.due || "9999") || (a.time || "").localeCompare(b.time || "") || a.created_at.localeCompare(b.created_at));
+    const done = tasks.filter((t) => t.done).sort((a, b) => (b.done_at || "").localeCompare(a.done_at || ""));
+    const people = new Set(open.flatMap((t) => t.assignees).filter((id) => this._member(id))).size;
+    return `<div style="--lc:${this._listColor(list)}">
+      <div class="lhero">
+        <div class="lhero-top">
+          <button class="round" data-action="list-back" aria-label="Retour aux listes">${icon("arrow-left")}</button><span class="grow"></span>
+          ${people ? `<span class="round" title="Membres concernés">${icon("account-check-outline")}${people}</span>` : ""}
+          <button class="round" data-action="list-edit" aria-label="Modifier la liste">${icon("dots-horizontal")}</button>
+        </div>
+        <h2>${esc(list.name)}</h2>
+        <span class="lhero-art" aria-hidden="true">${esc(list.emoji)}</span>
+        ${open.length ? `<span class="lhero-count">${open.length}</span>` : ""}
+      </div>
+      <label class="addrow">${icon("plus")}<input id="list-quick" placeholder="Ajouter" data-enter="list-task-quick" enterkeyhint="done" aria-label="Ajouter une tâche à ${esc(list.name)}"></label>
+      ${tasks.length ? this._tplRows([...open, ...done], { showPoints: false }) : `<div class="empty">Aucune tâche pour l'instant.<br>Tapez-en une ci-dessus, ou touchez + pour la dater et l'attribuer.</div>`}
+      ${done.length ? `<button class="btn text lclear" data-action="list-clear-done">Effacer les terminées (${done.length})</button>` : ""}
+    </div>`;
+  }
+
+  /* Bouton + flottant : nouvelle liste, ou nouvelle tâche dans la liste ouverte. */
+  _tplFab() {
+    if (this.s.tab !== "lists") return "";
+    const list = this._list(this.s.listId);
+    if (list) return `<button class="fab" style="--lc:${this._listColor(list)}" data-action="task-new" aria-label="Nouvelle tâche">${icon("plus")}</button>`;
+    return this.s.data.lists.length ? `<button class="fab" data-action="list-new" aria-label="Nouvelle liste">${icon("plus")}</button>` : "";
   }
 
   /* ---- famille */
@@ -1195,7 +1280,13 @@ class FoyerMalinPanel extends HTMLElement {
     return `<label class="field"><span>Tâche</span><input class="input" data-path="top.draft.title" data-autofocus value="${esc(f.title)}" placeholder="Sortir les poubelles" maxlength="200"></label>
       <div class="field-label">Pour qui ? ${f.assignees.length ? "" : "(personne en particulier)"}</div>
       ${this._tplMemberChips("assignees", f.assignees)}
-      <label class="field"><span>À faire pour le</span><input class="input" type="date" data-path="top.draft.due" value="${esc(f.due)}"></label>
+      <div class="two">
+        <label class="field"><span>À faire pour le</span><input class="input" type="date" data-path="top.draft.due" data-refresh value="${esc(f.due)}"></label>
+        <label class="field"><span>Heure (facultatif)</span><input class="input" type="time" data-path="top.draft.time" value="${esc(f.time)}" ${f.due ? "" : "disabled"}></label>
+      </div>
+      <label class="field"><span>Liste</span><select class="input" data-path="top.draft.list_id"><option value="">Aucune</option>${this.s.data.lists
+        .map((l) => `<option value="${l.id}" ${l.id === f.list_id ? "selected" : ""}>${esc(l.emoji)} ${esc(l.name)}</option>`)
+        .join("")}</select></label>
       ${this._tplRepeat(f)}
       ${f.freq !== "none" ? `<p class="hint">Une fois faite, la tâche revient à sa prochaine date.</p>` : ""}
       ${f.freq !== "none" && several ? `<div class="switch" style="margin-bottom:8px"><div class="grow"><div>Chacun son tour</div><div class="sub">La tâche passe au membre suivant à chaque fois.</div></div><button class="toggle ${f.rotate ? "on" : ""}" data-action="flip" data-field="rotate" role="switch" aria-checked="${Boolean(f.rotate)}" aria-label="Chacun son tour"></button></div>` : ""}
@@ -1248,7 +1339,11 @@ class FoyerMalinPanel extends HTMLElement {
 
   _tplListForm(f) {
     return `<label class="field"><span>Nom de la liste</span><input class="input" data-path="top.draft.name" data-autofocus value="${esc(f.name)}" placeholder="Valise des vacances" maxlength="60"></label>
-      <div class="field-label">Icône</div>${this._tplEmojis(LIST_EMOJIS, f.emoji)}`;
+      <div class="field-label">Icône</div>${this._tplEmojis(LIST_EMOJIS, f.emoji)}
+      <div class="field-label">Couleur</div>
+      <div class="swatches" style="margin-bottom:14px">${this.s.config.list_colors
+        .map((c) => `<button class="swatch ${c === f.color ? "on" : ""}" style="--c:${safeColor(c)}" data-action="set" data-field="color" data-value="${c}" aria-label="Couleur ${c}" aria-pressed="${c === f.color}"></button>`)
+        .join("")}</div>`;
   }
 }
 

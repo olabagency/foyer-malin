@@ -8,7 +8,7 @@ passe à sa prochaine date.
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, time
 from typing import TYPE_CHECKING
 
 from homeassistant.components.todo import (
@@ -20,6 +20,7 @@ from homeassistant.components.todo import (
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.util import dt as dt_util
 
 if TYPE_CHECKING:
     from . import FoyerConfigEntry
@@ -32,12 +33,24 @@ async def async_setup_entry(
     async_add_entities([FamilyTaskList(entry)])
 
 
-def _due(item: TodoItem) -> str | None:
+def _due(item: TodoItem) -> dict[str, str | None]:
+    """Date (et heure éventuelle) d'un élément de liste Home Assistant."""
     if isinstance(item.due, datetime):
-        return item.due.date().isoformat()
+        local = dt_util.as_local(item.due)
+        return {"due": local.date().isoformat(), "time": local.strftime("%H:%M")}
     if isinstance(item.due, date):
-        return item.due.isoformat()
-    return None
+        return {"due": item.due.isoformat(), "time": None}
+    return {"due": None, "time": None}
+
+
+def _todo_due(task: dict) -> date | datetime | None:
+    if not task["due"]:
+        return None
+    day = date.fromisoformat(task["due"])
+    if not task.get("time"):
+        return day
+    hour, minute = (int(x) for x in task["time"].split(":"))
+    return datetime.combine(day, time(hour, minute), tzinfo=dt_util.get_default_time_zone())
 
 
 class FamilyTaskList(TodoListEntity):
@@ -51,6 +64,7 @@ class FamilyTaskList(TodoListEntity):
         | TodoListEntityFeature.DELETE_TODO_ITEM
         | TodoListEntityFeature.UPDATE_TODO_ITEM
         | TodoListEntityFeature.SET_DUE_DATE_ON_ITEM
+        | TodoListEntityFeature.SET_DUE_DATETIME_ON_ITEM
         | TodoListEntityFeature.SET_DESCRIPTION_ON_ITEM
     )
 
@@ -80,7 +94,7 @@ class FamilyTaskList(TodoListEntity):
                 uid=task["id"],
                 summary=task["title"],
                 status=TodoItemStatus.COMPLETED if task["done"] else TodoItemStatus.NEEDS_ACTION,
-                due=date.fromisoformat(task["due"]) if task["due"] else None,
+                due=_todo_due(task),
                 description=task["notes"] or None,
             )
             for task in tasks
@@ -88,7 +102,7 @@ class FamilyTaskList(TodoListEntity):
 
     async def async_create_todo_item(self, item: TodoItem) -> None:
         try:
-            task = self._store.save_task({"title": item.summary, "due": _due(item), "notes": item.description})
+            task = self._store.save_task({"title": item.summary, **_due(item), "notes": item.description})
         except ValueError as err:
             raise HomeAssistantError(str(err)) from err
         if item.status == TodoItemStatus.COMPLETED:
@@ -104,7 +118,7 @@ class FamilyTaskList(TodoListEntity):
                 {
                     "id": task["id"],
                     "title": item.summary or task["title"],
-                    "due": _due(item),
+                    **_due(item),
                     "notes": item.description or "",
                 }
             )

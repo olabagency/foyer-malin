@@ -13,7 +13,7 @@ from homeassistant.components import websocket_api
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
 
-from .const import DOMAIN, FREQUENCIES, MEMBER_COLORS, VERSION
+from .const import DOMAIN, FREQUENCIES, LIST_COLORS, MEMBER_COLORS, VERSION
 from .reminder import TaskReminder
 
 if TYPE_CHECKING:
@@ -88,9 +88,6 @@ def async_register_websocket_api(hass: HomeAssistant) -> None:
         ws_events_delete,
         ws_lists_save,
         ws_lists_delete,
-        ws_list_items_add,
-        ws_list_items_update,
-        ws_list_items_delete,
         ws_settings_save,
         ws_reminder_test,
     ):
@@ -111,6 +108,7 @@ def ws_config(hass: HomeAssistant, connection: websocket_api.ActiveConnection, m
             "is_admin": connection.user.is_admin,
             "me": _me(hass, data, connection.user.id),
             "colors": MEMBER_COLORS,
+            "list_colors": LIST_COLORS,
             # Personnes de Home Assistant, pour relier un membre à son téléphone.
             "persons": [
                 {"entity_id": state.entity_id, "name": state.name}
@@ -182,6 +180,8 @@ def ws_members_delete(hass: HomeAssistant, connection: websocket_api.ActiveConne
                 vol.Optional("notes"): str,
                 vol.Optional("assignees"): [ID],
                 vol.Optional("due"): vol.Any(None, str),
+                vol.Optional("time"): vol.Any(None, vol.Match(r"^\d{1,2}:\d{2}$")),
+                vol.Optional("list_id"): vol.Any(None, ID),
                 vol.Optional("recurrence"): RECURRENCE,
                 vol.Optional("rotate"): bool,
                 vol.Optional("points"): vol.All(vol.Coerce(int), vol.Range(min=0, max=100)),
@@ -229,10 +229,13 @@ def ws_tasks_delete(hass: HomeAssistant, connection: websocket_api.ActiveConnect
     connection.send_result(msg["id"], {})
 
 
-@websocket_api.websocket_command({vol.Required("type"): "foyer_malin/tasks/clear_done"})
+@websocket_api.websocket_command(
+    {vol.Required("type"): "foyer_malin/tasks/clear_done", vol.Optional("list_id"): vol.Any(None, ID)}
+)
 @callback
 def ws_tasks_clear_done(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
-    connection.send_result(msg["id"], {"removed": _data(hass).store.clear_done_tasks()})
+    removed = _data(hass).store.clear_done_tasks(msg.get("list_id"))
+    connection.send_result(msg["id"], {"removed": removed})
 
 
 # ---------------------------------------------------------------------- agenda
@@ -293,7 +296,12 @@ def ws_events_delete(hass: HomeAssistant, connection: websocket_api.ActiveConnec
     {
         vol.Required("type"): "foyer_malin/lists/save",
         vol.Required("list"): vol.Schema(
-            {vol.Optional("id"): vol.Any(None, ID), vol.Required("name"): str, vol.Optional("emoji"): str}
+            {
+                vol.Optional("id"): vol.Any(None, ID),
+                vol.Required("name"): str,
+                vol.Optional("emoji"): str,
+                vol.Optional("color"): vol.Match(r"^#[0-9a-fA-F]{6}$"),
+            }
         ),
     }
 )
@@ -308,52 +316,6 @@ def ws_lists_save(hass: HomeAssistant, connection: websocket_api.ActiveConnectio
 def ws_lists_delete(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
     _data(hass).store.delete_list(msg["list_id"])
     connection.send_result(msg["id"], {})
-
-
-@websocket_api.websocket_command(
-    {
-        vol.Required("type"): "foyer_malin/lists/items/add",
-        vol.Required("list_id"): ID,
-        vol.Required("texts"): vol.All([str], vol.Length(min=1, max=50)),
-    }
-)
-@callback
-@_guarded
-def ws_list_items_add(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
-    connection.send_result(msg["id"], {"list": _data(hass).store.add_list_items(msg["list_id"], msg["texts"])})
-
-
-@websocket_api.websocket_command(
-    {
-        vol.Required("type"): "foyer_malin/lists/items/update",
-        vol.Required("list_id"): ID,
-        vol.Required("item_id"): ID,
-        vol.Optional("done"): bool,
-        vol.Optional("text"): str,
-    }
-)
-@callback
-@_guarded
-def ws_list_items_update(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
-    entry = _data(hass).store.update_list_item(
-        msg["list_id"], msg["item_id"], done=msg.get("done"), text=msg.get("text")
-    )
-    connection.send_result(msg["id"], {"list": entry})
-
-
-@websocket_api.websocket_command(
-    {
-        vol.Required("type"): "foyer_malin/lists/items/delete",
-        vol.Required("list_id"): ID,
-        # Sans identifiants : retire tous les éléments cochés.
-        vol.Optional("item_ids"): [ID],
-    }
-)
-@callback
-@_guarded
-def ws_list_items_delete(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
-    entry = _data(hass).store.delete_list_items(msg["list_id"], msg.get("item_ids"))
-    connection.send_result(msg["id"], {"list": entry})
 
 
 # ---------------------------------------------------------------------- réglages

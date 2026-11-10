@@ -108,6 +108,8 @@ class TasksTodaySensor(_FoyerSensor):
                     "id": t["id"],
                     "title": t["title"],
                     "due": t["due"],
+                    "time": t["time"],
+                    "list": self._store.lists[t["list_id"]]["name"] if t["list_id"] in self._store.lists else None,
                     "overdue": t["due"] < today.isoformat(),
                     "assignees": _names(self._store, t["assignees"]),
                 }

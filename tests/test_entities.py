@@ -36,6 +36,19 @@ async def test_todo_list_follows_the_store(hass, entry, store):
     assert store.tasks == {}
 
 
+async def test_todo_list_keeps_the_time(hass, entry, store):
+    await hass.services.async_call(
+        "todo", "add_item", {"item": "Arroser les haies", "due_datetime": "2026-11-20 18:30:00"},
+        target={"entity_id": TODO}, blocking=True,
+    )
+    task = next(iter(store.tasks.values()))
+    assert (task["due"], task["time"]) == ("2026-11-20", "18:30")
+    items = await hass.services.async_call(
+        "todo", "get_items", {}, target={"entity_id": TODO}, blocking=True, return_response=True
+    )
+    assert items[TODO]["items"][0]["due"].startswith("2026-11-20T18:30:00")
+
+
 async def test_sensors(hass, entry, store):
     today = dt_util.now().date()
     lea = store.save_member({"name": "Léa"})

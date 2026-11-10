@@ -11,18 +11,18 @@ Une intégration Home Assistant pour organiser la vie de famille : qui fait quoi
 **👨‍👩‍👧 La famille**
 Un profil par membre : prénom, avatar, couleur, adulte ou enfant. Chaque membre peut être relié à une personne de Home Assistant pour recevoir les rappels sur son téléphone.
 
-**✅ Les tâches**
-- À qui, pour quand, avec une note. Ajout rapide en une ligne, ou détaillé.
-- Répétition : tous les jours, toutes les semaines, tous les mois, tous les ans, ou « toutes les 2 semaines ». Une tâche faite revient toute seule à sa prochaine date.
+**📋 Les listes et leurs tâches**
+- Une liste par sujet, partagée par toute la famille : tâches ménagères, jardin, le chat… avec une icône et une couleur.
+- Dans chaque liste, des tâches : à qui, pour quel jour et quelle heure, avec une note. Tapez-en une dans « Ajouter », ou touchez + pour la détailler.
+- Répétition : tous les jours, toutes les semaines, tous les mois, tous les ans, ou « toutes les 2 semaines », « tous les 3 jours ». Une tâche faite revient toute seule à sa prochaine date.
 - « Chacun son tour » : les poubelles passent de Léa à Tom, puis de Tom à Léa.
-- Des points par tâche et un classement de la semaine, pour motiver les troupes (désactivable).
-- Vue par membre, tâches en retard mises en avant.
+- Les retards s'affichent en rouge ; les tâches terminées restent en bas, barrées.
+
+**✅ L'onglet Tâches**
+Toutes les tâches de toutes les listes, rangées par échéance, avec un filtre par membre. Des points par tâche et un classement de la semaine pour motiver les troupes (désactivable).
 
 **🗓️ L'agenda**
 Rendez-vous, activités, vacances : avec une heure ou sur la journée, sur plusieurs jours, répétés chaque semaine si besoin, avec le lieu et les membres concernés. La vue semaine montre aussi les tâches à faire chaque jour.
-
-**📝 Les listes partagées**
-Valise des vacances, idées cadeaux, travaux à prévoir… Tapez « maillot, tongs, crème solaire » pour ajouter trois éléments d'un coup.
 
 **🔔 Le rappel du jour**
 À l'heure de votre choix, chacun reçoit sur son téléphone les tâches qui l'attendent encore aujourd'hui.
@@ -63,7 +63,7 @@ Les adultes reçoivent aussi les tâches attribuées à personne.
 | Entité | Rôle |
 | --- | --- |
 | `calendar.foyer_malin_agenda` | L'agenda de la famille, utilisable dans le tableau de bord Calendrier et les automatisations. |
-| `todo.foyer_malin_taches` | Les tâches, visibles dans « À faire ». Cocher une tâche ici compte comme dans le panneau. |
+| `todo.foyer_malin_taches` | Toutes les tâches (date et heure comprises), visibles dans « À faire ». Cocher une tâche ici compte comme dans le panneau. |
 | `sensor.foyer_malin_taches_du_jour` | Nombre de tâches à faire aujourd'hui, retards compris (détail dans les attributs). |
 | `sensor.foyer_malin_prochain_evenement` | Titre du prochain événement (date, heure, lieu et membres dans les attributs). |
 

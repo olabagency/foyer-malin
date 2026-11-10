@@ -46,7 +46,7 @@ async def test_errors_are_readable(hass, entry, hass_ws_client):
     assert empty["error"] == {"code": "invalid_format", "message": "Le titre est obligatoire"}
     missing = await call(client, "tasks/complete", task_id="inconnu")
     assert missing["error"]["code"] == "not_found"
-    assert (await call(client, "lists/items/add", list_id="inconnu", texts=["x"]))["error"]["code"] == "not_found"
+    assert (await call(client, "tasks/save", task={"title": "x", "time": "midi"}))["error"]["code"] == "invalid_format"
     assert (await call(client, "events/range", start="2026-11-20", end="2026-11-01"))["error"]["code"] == "invalid_format"
     assert not (await call(client, "members/save", member={"name": "Léa", "color": "rouge"}))["success"]
 
@@ -61,11 +61,14 @@ async def test_events_lists_and_settings(hass, entry, hass_ws_client):
     await call(client, "events/delete", event_id=event["id"])
     assert (await call(client, "events/range", start="2026-11-16", end="2026-11-22"))["result"]["events"] == []
 
-    bag = (await call(client, "lists/save", list={"name": "Valise"}))["result"]["list"]
-    items = (await call(client, "lists/items/add", list_id=bag["id"], texts=["Maillot", "Tongs"]))["result"]["list"]["items"]
-    await call(client, "lists/items/update", list_id=bag["id"], item_id=items[0]["id"], done=True)
-    left = (await call(client, "lists/items/delete", list_id=bag["id"]))["result"]["list"]["items"]
-    assert [i["text"] for i in left] == ["Tongs"]
+    bag = (await call(client, "lists/save", list={"name": "Valise", "color": "#3b8247"}))["result"]["list"]
+    task = (
+        await call(client, "tasks/save", task={"title": "Maillot", "list_id": bag["id"], "due": "2026-11-20", "time": "18:30"})
+    )["result"]["task"]
+    assert (task["list_id"], task["time"]) == (bag["id"], "18:30")
+    await call(client, "tasks/complete", task_id=task["id"])
+    assert (await call(client, "tasks/clear_done", list_id=bag["id"]))["result"] == {"removed": 1}
+    assert (await call(client, "config"))["result"]["list_colors"][0] == "#3b8247"
 
     settings = (await call(client, "settings/save", settings={"reminder_time": "7:05"}))["result"]["settings"]
     assert settings == {"reminder": True, "reminder_time": "07:05", "points": True}

@@ -14,6 +14,7 @@ from homeassistant.util import dt as dt_util
 from .const import (
     DEFAULT_SETTINGS,
     HISTORY_LIMIT,
+    LIST_COLORS,
     MEMBER_COLORS,
     STORAGE_KEY,
     STORAGE_MINOR_VERSION,
@@ -63,8 +64,38 @@ class _MigratingStore(Store[dict[str, Any]]):
     ) -> dict[str, Any]:
         if old_major_version > STORAGE_VERSION:
             raise NotImplementedError("Données créées par une version plus récente de Foyer Malin")
-        # Les futures migrations s'ajoutent ici, une par version mineure du stockage.
-        return dict(old_data)
+        data = dict(old_data)
+        if old_major_version == 1 and old_minor_version < 2:
+            # 0.2.0 : une liste contient des tâches (avec date, répétition, membres) au lieu de simples éléments.
+            tasks = list(data.get("tasks", []))
+            now = dt_util.utcnow().isoformat()
+            for index, entry in enumerate(data.get("lists", [])):
+                entry.setdefault("color", LIST_COLORS[index % len(LIST_COLORS)])
+                for item in entry.pop("items", []):
+                    tasks.append(
+                        {
+                            "id": item.get("id") or uuid4().hex,
+                            "title": item.get("text") or "?",
+                            "notes": "",
+                            "assignees": [],
+                            "due": None,
+                            "time": None,
+                            "anchor": None,
+                            "recurrence": normalize_recurrence(None),
+                            "rotate": False,
+                            "points": 1,
+                            "list_id": entry["id"],
+                            "done": bool(item.get("done")),
+                            "done_at": now if item.get("done") else None,
+                            "done_by": None,
+                            "created_at": now,
+                        }
+                    )
+            for task in tasks:
+                task.setdefault("list_id", None)
+                task.setdefault("time", None)
+            data["tasks"] = tasks
+        return data
 
 
 class FoyerStore:
@@ -195,6 +226,8 @@ class FoyerStore:
         except (TypeError, ValueError):
             points = 1
         assignees = self._known_members(raw["assignees"]) if "assignees" in raw else existing.get("assignees", [])
+        list_id = raw["list_id"] if "list_id" in raw else existing.get("list_id")
+        time = raw["time"] if "time" in raw else existing.get("time")
         task = {
             "id": task_id,
             "title": title,
@@ -207,6 +240,10 @@ class FoyerStore:
             # À tour de rôle : la tâche passe au membre suivant à chaque fois qu'elle est faite.
             "rotate": bool(raw.get("rotate", existing.get("rotate", False))) and len(assignees) > 1,
             "points": points,
+            # Liste à laquelle appartient la tâche (aucune : visible seulement dans l'onglet Tâches).
+            "list_id": list_id if list_id in self.lists else None,
+            # Heure facultative « HH:MM », seulement avec une date.
+            "time": _time(time, None) if time and due else None,
             "done": bool(existing.get("done", False)),
             "done_at": existing.get("done_at"),
             "done_by": existing.get("done_by"),
@@ -266,8 +303,9 @@ class FoyerStore:
         if self.tasks.pop(task_id, None) is not None:
             self._save()
 
-    def clear_done_tasks(self) -> int:
-        done = [t["id"] for t in self.tasks.values() if t["done"]]
+    def clear_done_tasks(self, list_id: str | None = None) -> int:
+        """Efface les tâches terminées (d'une liste, ou de partout)."""
+        done = [t["id"] for t in self.tasks.values() if t["done"] and (list_id is None or t["list_id"] == list_id)]
         for task_id in done:
             self.tasks.pop(task_id)
         if done:
@@ -281,7 +319,7 @@ class FoyerStore:
             tasks = [t for t in tasks if t["due"] and t["due"] <= until.isoformat()]
         if member_id is not None:
             tasks = [t for t in tasks if not t["assignees"] or member_id in t["assignees"]]
-        return sorted(tasks, key=lambda t: (t["due"] or "9999", t["created_at"]))
+        return sorted(tasks, key=lambda t: (t["due"] or "9999", t["time"] or "", t["created_at"]))
 
     def scores(self, since: date) -> dict[str, dict[str, int]]:
         """Points et nombre de tâches terminées par membre depuis une date."""
@@ -373,50 +411,22 @@ class FoyerStore:
             raise ValueError("Le nom de la liste est obligatoire")
         list_id = raw.get("id") if raw.get("id") in self.lists else uuid4().hex
         existing = self.lists.get(list_id, {})
+        color = _text(raw.get("color"), 9) or existing.get("color") or LIST_COLORS[len(self.lists) % len(LIST_COLORS)]
         entry = {
             "id": list_id,
             "name": name,
             "emoji": _text(raw.get("emoji"), 8) or existing.get("emoji") or "📝",
-            "items": existing.get("items", []),
+            "color": color,
+            "created_at": existing.get("created_at") or dt_util.utcnow().isoformat(),
         }
         self.lists[list_id] = entry
         self._save()
         return entry
 
     def delete_list(self, list_id: str) -> None:
-        if self.lists.pop(list_id, None) is not None:
-            self._save()
-
-    def add_list_items(self, list_id: str, texts: list[str]) -> dict[str, Any]:
-        entry = self.lists[list_id]
-        for text in texts:
-            text = _text(text)
-            if text:
-                entry["items"].append({"id": uuid4().hex, "text": text, "done": False})
-        del entry["items"][500:]
+        """Supprime une liste et ses tâches."""
+        if self.lists.pop(list_id, None) is None:
+            return
+        for task_id in [t["id"] for t in self.tasks.values() if t["list_id"] == list_id]:
+            self.tasks.pop(task_id)
         self._save()
-        return entry
-
-    def update_list_item(self, list_id: str, item_id: str, **changes: Any) -> dict[str, Any]:
-        entry = self.lists[list_id]
-        for item in entry["items"]:
-            if item["id"] == item_id:
-                if changes.get("done") is not None:
-                    item["done"] = bool(changes["done"])
-                if changes.get("text"):
-                    item["text"] = _text(changes["text"])
-                break
-        else:
-            raise KeyError(item_id)
-        self._save()
-        return entry
-
-    def delete_list_items(self, list_id: str, item_ids: list[str] | None = None) -> dict[str, Any]:
-        """Retire des éléments ; sans identifiants, retire tous ceux qui sont cochés."""
-        entry = self.lists[list_id]
-        if item_ids is None:
-            entry["items"] = [i for i in entry["items"] if not i["done"]]
-        else:
-            entry["items"] = [i for i in entry["items"] if i["id"] not in set(item_ids)]
-        self._save()
-        return entry
