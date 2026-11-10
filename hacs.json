@@ -1,0 +1,11 @@
+{
+  "name": "Foyer Malin par Adri",
+  "homeassistant": "2025.1.0",
+  "render_readme": true,
+  "country": [
+    "FR",
+    "BE",
+    "CH",
+    "CA"
+  ]
+}

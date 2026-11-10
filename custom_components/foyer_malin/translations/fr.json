@@ -1,0 +1,13 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Foyer Malin par Adri",
+        "description": "Les tâches, l'agenda et les listes de toute la famille. Tout reste sur votre Home Assistant. Les membres du foyer s'ajoutent ensuite depuis le panneau Foyer Malin."
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "Foyer Malin est déjà configuré."
+    }
+  }
+}
