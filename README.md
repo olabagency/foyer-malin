@@ -14,7 +14,7 @@ Un profil par membre : prénom, avatar, couleur, adulte ou enfant. Chaque membre
 **📋 Les listes et leurs tâches**
 - Une liste par sujet, partagée par toute la famille : tâches ménagères, jardin, le chat… avec une icône et une couleur.
 - Dans chaque liste, des tâches : à qui, pour quel jour et quelle heure, avec une note. Tapez-en une dans « Ajouter », ou touchez + pour la détailler.
-- Répétition : tous les jours, toutes les semaines, tous les mois, tous les ans, ou « toutes les 2 semaines », « tous les 3 jours ». Une tâche faite revient toute seule à sa prochaine date.
+- Répétition personnalisée (voir plus bas) : tous les N jours, semaines, mois ou ans, jours de la semaine au choix, cycles « 1 semaine sur 2 », jour du mois, date de fin. Une tâche faite revient toute seule à sa prochaine date.
 - « Chacun son tour » : les poubelles passent de Léa à Tom, puis de Tom à Léa.
 - Les retards s'affichent en rouge ; les tâches terminées restent en bas, barrées.
 
@@ -57,6 +57,24 @@ Aucun fichier YAML à modifier, aucune clé à fournir. Les réglages (rappel, h
 Le rappel arrive par l'application mobile Home Assistant. Pour chaque membre : ouvrez son profil et choisissez sa **personne dans Home Assistant** (celle dont le téléphone a l'application installée). Le bouton « Envoyer le rappel maintenant » permet de vérifier.
 
 Les adultes reçoivent aussi les tâches attribuées à personne.
+
+## Répétitions
+
+Pour une tâche ou un événement : choisissez « Toutes les semaines », « Tous les mois »… puis réglez le détail. Une phrase résume la règle et les prochaines dates sont affichées avant d'enregistrer. La date de la tâche (ou le début de l'événement) est le **point de départ** et la première occurrence.
+
+| Je veux… | Réglage |
+| --- | --- |
+| Tous les lundis et jeudis | Toutes les semaines · jours : lun. et jeu. |
+| Une semaine sur deux, à partir du 23 novembre | Toutes les **2** semaines · date : 23 novembre · semaine 1 cochée |
+| Une semaine sur deux, mais l'autre semaine | Toutes les 2 semaines · cochez « Semaine 2 » |
+| Deux semaines sur trois | Toutes les **3** semaines · semaines 1 et 2 cochées |
+| Le 15 de chaque mois | Tous les mois · « Le 15 de chaque mois » |
+| Le 2e mardi du mois | Tous les mois · « Le 2e mardi du mois » |
+| Le dernier vendredi du mois | Tous les mois · « Le dernier vendredi du mois » |
+| Tous les 3 mois, le dernier jour | Tous les **3** mois · « Le dernier jour du mois » |
+| Jusqu'à une date | Champ « Jusqu'au » |
+
+Dans un cycle de plusieurs semaines, la semaine 1 est celle de la date de départ. Changer la répétition d'une tâche repart de sa date affichée.
 
 ## Dans Home Assistant
 

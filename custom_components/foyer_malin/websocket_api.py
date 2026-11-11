@@ -13,7 +13,8 @@ from homeassistant.components import websocket_api
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
 
-from .const import DOMAIN, FREQUENCIES, LIST_COLORS, MEMBER_COLORS, VERSION
+from .const import DOMAIN, FREQUENCIES, LIST_COLORS, MEMBER_COLORS, MONTH_MODES, VERSION
+from .recurrence import normalize_recurrence, upcoming
 from .reminder import TaskReminder
 
 if TYPE_CHECKING:
@@ -27,6 +28,9 @@ RECURRENCE = vol.Schema(
         vol.Optional("freq"): vol.In(FREQUENCIES),
         vol.Optional("interval"): vol.All(vol.Coerce(int), vol.Range(min=1, max=99)),
         vol.Optional("until"): vol.Any(None, str),
+        vol.Optional("weekdays"): [vol.All(vol.Coerce(int), vol.Range(min=0, max=6))],
+        vol.Optional("weeks"): [vol.All(vol.Coerce(int), vol.Range(min=0, max=98))],
+        vol.Optional("month_mode"): vol.In(MONTH_MODES),
     }
 )
 # Période maximale demandée par l'agenda en une fois.
@@ -77,6 +81,7 @@ def async_register_websocket_api(hass: HomeAssistant) -> None:
         ws_config,
         ws_subscribe,
         ws_events_range,
+        ws_recurrence_preview,
         ws_members_save,
         ws_members_delete,
         ws_tasks_save,
@@ -256,6 +261,22 @@ def ws_events_range(hass: HomeAssistant, connection: websocket_api.ActiveConnect
     if end < start or (end - start).days > MAX_RANGE_DAYS:
         raise vol.Invalid("Période invalide")
     connection.send_result(msg["id"], {"events": _data(hass).store.event_occurrences(start, end)})
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "foyer_malin/recurrence/preview",
+        vol.Required("start"): str,
+        vol.Required("recurrence"): RECURRENCE,
+        vol.Optional("count", default=6): vol.All(int, vol.Range(min=1, max=24)),
+    }
+)
+@callback
+@_guarded
+def ws_recurrence_preview(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+    """Les prochaines dates d'une répétition, pour les montrer pendant qu'on la règle."""
+    dates = upcoming(_parse_date(msg["start"][:10]), normalize_recurrence(msg["recurrence"]), msg["count"])
+    connection.send_result(msg["id"], {"dates": [d.isoformat() for d in dates]})
 
 
 @websocket_api.websocket_command(

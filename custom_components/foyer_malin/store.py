@@ -235,8 +235,11 @@ class FoyerStore:
             "notes": _text(raw.get("notes", existing.get("notes")), 1000),
             "assignees": assignees,
             "due": due,
-            # Date d'origine de la répétition : « le 31 du mois » reste le 31 après un mois de 30 jours.
-            "anchor": due if due != existing.get("due") or not existing.get("anchor") else existing["anchor"],
+            # Date de départ de la répétition : « le 31 du mois » reste le 31 après un mois de 30 jours, et un cycle
+            # « une semaine sur deux » garde sa phase. Changer la répétition ou la date repart d'aujourd'hui.
+            "anchor": due
+            if due != existing.get("due") or not existing.get("anchor") or recurrence != existing.get("recurrence")
+            else existing["anchor"],
             "recurrence": recurrence,
             # À tour de rôle : la tâche passe au membre suivant à chaque fois qu'elle est faite.
             "rotate": bool(raw.get("rotate", existing.get("rotate", False))) and len(assignees) > 1,

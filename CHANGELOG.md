@@ -7,6 +7,24 @@ Toutes les évolutions notables sont listées ici. Les numéros de version suive
 - **mineure** (1.**1**.0) : nouvelles fonctions, vos données et réglages sont conservés ;
 - **majeure** (**2**.0.0) : changement important, lisez les notes avant de mettre à jour.
 
+## [0.4.0] – 2026-11-11
+
+### Ajouté
+
+- 🔁 **Répétition personnalisée**, pour les tâches comme pour les événements.
+  - **Jours de la semaine** : « tous les lundis et jeudis ».
+  - **Cycles** : « 1 semaine sur 2 », « 2 semaines sur 3 »… on choisit les semaines actives du cycle, la semaine 1 étant celle de la date de départ.
+  - **Mois** : le 15, le 2e mardi, le dernier mardi ou le dernier jour du mois.
+  - **Date de fin** pour les tâches aussi (elle n'existait que pour les événements).
+  - Sous le formulaire, une phrase résume la règle (« Toutes les 2 semaines, le lundi et le jeudi, à partir du lundi 23 novembre 2026. ») et les **6 prochaines dates** sont affichées avant d'enregistrer.
+  - La date de départ est toujours la première occurrence ; une tâche faite passe à la prochaine date du motif, sans rattraper les retards.
+- ➕ **Boutons d'ajout bien visibles** : « Nouvelle tâche » sur l'onglet Tâches, « Événement » sur l'onglet Agenda, et un bouton « Ajouter » (au lieu d'une icône de réglages) à côté du champ d'ajout rapide.
+
+### Corrigé
+
+- Les champs **date et heure** ne dépassent plus à droite de l'écran sur iPhone.
+- Les anciennes répétitions (« tous les N jours, semaines, mois, ans ») restent valables telles quelles.
+
 ## [0.3.0] – 2026-11-11
 
 ### Ajouté

@@ -4,7 +4,7 @@
  * Les couleurs viennent du thème de Home Assistant (clair ou sombre).
  */
 
-const FOYER_VERSION = "0.3.0";
+const FOYER_VERSION = "0.4.0";
 
 /* ------------------------------------------------------------------ outils */
 
@@ -46,11 +46,55 @@ function dayLabel(iso, today = todayIso()) {
 const FREQ_LABELS = { none: "Une seule fois", daily: "Tous les jours", weekly: "Toutes les semaines", monthly: "Tous les mois", yearly: "Tous les ans" };
 const FREQ_UNITS = { daily: ["jour", "jours"], weekly: ["semaine", "semaines"], monthly: ["mois", "mois"], yearly: ["an", "ans"] };
 
-function recurrenceLabel(rec) {
+const WD_SHORT = ["lun.", "mar.", "mer.", "jeu.", "ven.", "sam.", "dim."];
+const WD_FULL = ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"];
+const NTH = ["1er", "2e", "3e", "4e", "5e"];
+const weekdayOf = (iso) => (parseIso(iso).getDay() + 6) % 7; // 0 = lundi
+
+/* « le 15 », « le 2e mardi », « le dernier mardi », « le dernier jour » pour une répétition mensuelle. */
+function monthModeText(mode, startIso) {
+  const d = parseIso(startIso || todayIso());
+  if (mode === "last_day") return "le dernier jour du mois";
+  if (mode === "last_weekday") return `le dernier ${WD_FULL[weekdayOf(isoDate(d))]}`;
+  if (mode === "nth_weekday") return `le ${NTH[Math.floor((d.getDate() - 1) / 7)]} ${WD_FULL[weekdayOf(isoDate(d))]}`;
+  return `le ${d.getDate()}`;
+}
+
+/* Libellé court, dans une ligne de tâche : « Toutes les 2 semaines · lun. jeu. ». */
+function recurrenceLabel(rec, startIso) {
   if (!rec || rec.freq === "none") return "";
-  if ((rec.interval || 1) === 1) return FREQ_LABELS[rec.freq];
-  // « semaine » est féminin : « Toutes les 2 semaines », mais « Tous les 3 jours ».
-  return `${rec.freq === "weekly" ? "Toutes" : "Tous"} les ${rec.interval} ${FREQ_UNITS[rec.freq][1]}`;
+  const n = rec.interval || 1;
+  const weeks = rec.weeks && rec.weeks.length ? rec.weeks : [0];
+  let label;
+  if (rec.freq === "weekly" && n > 1 && weeks.length > 1) label = `${weeks.length} semaines sur ${n}`;
+  else if (n === 1) label = FREQ_LABELS[rec.freq];
+  else label = `${rec.freq === "weekly" ? "Toutes" : "Tous"} les ${n} ${FREQ_UNITS[rec.freq][1]}`;
+  if (rec.freq === "weekly" && rec.weekdays && rec.weekdays.length) label += ` · ${rec.weekdays.map((d) => WD_SHORT[d]).join(" ")}`;
+  if (rec.freq === "monthly" && rec.month_mode && rec.month_mode !== "day") label += ` · ${monthModeText(rec.month_mode, startIso)}`;
+  return label;
+}
+
+/* Phrase complète, sous le formulaire : « Toutes les 2 semaines, le lundi et le jeudi, à partir du lundi 23 novembre 2026. » */
+function describeRecurrence(rec, startIso) {
+  if (!rec || rec.freq === "none") return "";
+  const n = Number(rec.interval) || 1;
+  const weeks = rec.weeks && rec.weeks.length ? rec.weeks : [0];
+  const parts = [];
+  if (rec.freq === "weekly") {
+    if (n > 1 && weeks.length > 1) parts.push(`${weeks.length} semaines sur ${n}`);
+    else parts.push(n === 1 ? "Toutes les semaines" : `Toutes les ${n} semaines`);
+    // « le lundi », « le lundi et le jeudi », « le lundi, le mercredi et le vendredi ».
+    const days = (rec.weekdays && rec.weekdays.length ? rec.weekdays : [weekdayOf(startIso)]).map((d) => `le ${WD_FULL[d]}`);
+    parts.push(days.length > 1 ? days.slice(0, -1).join(", ") + " et " + days[days.length - 1] : days[0]);
+  } else if (rec.freq === "monthly") {
+    parts.push(n === 1 ? "Tous les mois" : `Tous les ${n} mois`);
+    parts.push(monthModeText(rec.month_mode, startIso));
+  } else {
+    parts.push(n === 1 ? FREQ_LABELS[rec.freq] : `Tous les ${n} ${FREQ_UNITS[rec.freq][1]}`);
+  }
+  parts.push(`à partir du ${fmtDay(startIso, { weekday: "long", day: "numeric", month: "long", year: "numeric" })}`);
+  if (rec.until) parts.push(`jusqu'au ${fmtDay(rec.until, { day: "numeric", month: "long", year: "numeric" })}`);
+  return parts.join(", ") + ".";
 }
 
 /* Heure d'un événement : « 17:00 – 18:00 », « Journée », « Jusqu'au 16 nov. ». */
@@ -195,8 +239,20 @@ textarea.input { resize: vertical; min-height: 80px; }
 select.input { appearance: auto; }
 label.field { display: block; margin-bottom: 14px; }
 label.field > span, .field-label { display: block; font-size: 13px; color: var(--fm-text2); margin-bottom: 6px; }
-.two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-.two.repeat { grid-template-columns: 1.7fr 1fr; }
+.two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+label.field { min-width: 0; }
+.input { min-width: 0; max-width: 100%; }
+/* Sur iPhone, les champs date et heure ont une largeur propre qui déborde de la grille : on la neutralise. */
+input[type="date"].input, input[type="time"].input { appearance: none; -webkit-appearance: none; display: block; width: 100%; text-align: left; line-height: 1.25; }
+.repeat-box { border-top: 1px solid var(--fm-divider); padding-top: 14px; margin-top: 4px; }
+.every { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+.every .input { width: 84px; text-align: center; flex-shrink: 0; }
+.every span { color: var(--fm-text2); font-size: 15px; }
+.chips.tight { gap: 6px; margin-bottom: 14px; }
+.chips.days { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 5px; }
+.chip.day { min-width: 0; justify-content: center; padding: 0; font-size: 13px; }
+.summary { background: var(--fm-soft); border-radius: 12px; padding: 12px 14px; font-size: 14px; line-height: 1.45; margin: 2px 0 14px; }
+.summary .next { display: block; margin-top: 6px; color: var(--fm-text2); font-size: 13px; }
 .quick { display: flex; gap: 8px; margin-bottom: 14px; }
 .quick .btn { padding: 0 14px; flex-shrink: 0; }
 
@@ -283,6 +339,9 @@ label.field > span, .field-label { display: block; font-size: 13px; color: var(-
   width: 64px; height: 64px; border-radius: 50%; border: 0; background: var(--lc, var(--fm-primary)); color: #fff;
   display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 14px rgba(0,0,0,.28); }
 .fab ha-icon { --mdc-icon-size: 32px; }
+.fab.ext { width: auto; height: 56px; border-radius: 28px; padding: 0 22px 0 16px; gap: 8px; font-size: 16px; font-weight: 500; }
+.fab.ext ha-icon { --mdc-icon-size: 26px; }
+.page.has-fab { padding-bottom: 112px; }
 
 /* Famille */
 .member { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; padding: 10px 12px; margin-bottom: 8px;
@@ -546,6 +605,7 @@ class FoyerMalinPanel extends HTMLElement {
     // Certains champs changent le reste du formulaire : on le redessine une fois la saisie validée.
     if (committed && el.dataset.refresh != null) {
       if (this.top && this.top.type === "event") this._fixEventEnd(el.dataset.path);
+      this._fixRepeat();
       this._renderOverlay();
     }
   }
@@ -688,9 +748,21 @@ class FoyerMalinPanel extends HTMLElement {
         this._renderOverlay();
         break;
       }
+      case "pick-day":
+      case "pick-week": {
+        // Jours de la semaine / semaines du cycle : au moins un reste coché.
+        const list = top.draft[action === "pick-day" ? "weekdays" : "weeks"];
+        const value = Number(d.value);
+        const i = list.indexOf(value);
+        if (i >= 0 && list.length > 1) list.splice(i, 1);
+        else if (i < 0) list.push(value);
+        list.sort((a, b) => a - b);
+        this._renderOverlay();
+        break;
+      }
       case "task-save": {
         const f = top.draft;
-        const recurrence = { freq: f.freq, interval: Number(f.interval) || 1 };
+        const recurrence = this._recurrenceOf(f);
         const task = {
           id: f.id, title: f.title, notes: f.notes, assignees: f.assignees, due: f.due || null,
           time: (f.due && f.time) || null, list_id: f.list_id || null,
@@ -727,7 +799,7 @@ class FoyerMalinPanel extends HTMLElement {
           id: f.id, title: f.title, all_day: f.all_day, members: f.members, location: f.location, notes: f.notes,
           start: f.all_day ? f.startDate : `${f.startDate}T${f.startTime}`,
           end: f.all_day ? f.endDate : `${f.endDate}T${f.endTime}`,
-          recurrence: { freq: f.freq, interval: Number(f.interval) || 1, until: f.until || null },
+          recurrence: this._recurrenceOf(f),
         };
         if (await this._call("events/save", { event })) this._dispatch("close");
         break;
@@ -859,6 +931,60 @@ class FoyerMalinPanel extends HTMLElement {
     }
   }
 
+  /* Les réglages de répétition tels que le formulaire les manipule. */
+  _repeatDraft(rec) {
+    return {
+      freq: rec.freq || "none", interval: rec.interval || 1, until: rec.until || "",
+      weekdays: [...(rec.weekdays || [])], weeks: [...(rec.weeks && rec.weeks.length ? rec.weeks : [0])], month_mode: rec.month_mode || "day",
+    };
+  }
+
+  _recurrenceOf(f) {
+    return {
+      freq: f.freq, interval: Number(f.interval) || 1, until: f.until || null,
+      weekdays: f.freq === "weekly" ? f.weekdays : [], weeks: f.freq === "weekly" ? f.weeks : [0], month_mode: f.freq === "monthly" ? f.month_mode : "day",
+    };
+  }
+
+  /* Date de départ de la répétition : celle de la tâche (aujourd'hui si elle n'en a pas) ou du début de l'événement. */
+  _repeatStart(f) {
+    return (this.top.type === "event" ? f.startDate : f.due) || this.today;
+  }
+
+  /* Garde la répétition cohérente quand la date ou la fréquence change. */
+  _fixRepeat() {
+    const top = this.top;
+    if (!top || !["task", "event"].includes(top.type)) return;
+    const f = top.draft;
+    const wd = weekdayOf(this._repeatStart(f));
+    // Un seul jour coché, celui de la date de départ : il suit la date quand on la déplace.
+    if (f.freq === "weekly" && (!f.weekdays.length || (f.weekdays.length === 1 && top.repeatWd != null && f.weekdays[0] === top.repeatWd))) f.weekdays = [wd];
+    top.repeatWd = wd;
+    f.weeks = f.weeks.filter((w) => w < (Number(f.interval) || 1));
+    if (!f.weeks.length) f.weeks = [0];
+    if (f.freq !== "none" && top.type === "task" && !f.due) f.due = this.today;
+  }
+
+  /* Les prochaines dates, calculées par le serveur avec les mêmes règles que pour de vrai. */
+  async _refreshPreview() {
+    const top = this.top;
+    if (!top || !["task", "event"].includes(top.type) || top.draft.freq === "none") return;
+    const start = this._repeatStart(top.draft);
+    const recurrence = this._recurrenceOf(top.draft);
+    const sig = JSON.stringify([start, recurrence]);
+    if (top.previewSig === sig) return;
+    top.previewSig = sig;
+    try {
+      const res = await this._ws("recurrence/preview", { start, recurrence, count: 6 });
+      if (this.top !== top || top.previewSig !== sig) return;
+      top.preview = res.dates;
+      const el = this.shadowRoot.getElementById("repeat-preview");
+      if (el) el.innerHTML = this._tplRepeatSummary(top);
+    } catch (_) {
+      top.preview = null;
+    }
+  }
+
   _openTask(task = {}) {
     const rec = task.recurrence || { freq: "none", interval: 1 };
     this.s.stack.push({
@@ -866,9 +992,10 @@ class FoyerMalinPanel extends HTMLElement {
       draft: {
         id: task.id || null, title: task.title || "", notes: task.notes || "", assignees: [...(task.assignees || [])],
         due: task.due || "", time: task.time || "", list_id: task.list_id || "",
-        freq: rec.freq, interval: rec.interval, rotate: Boolean(task.rotate), points: task.points ?? 1,
+        ...this._repeatDraft(rec), rotate: Boolean(task.rotate), points: task.points ?? 1,
       },
     });
+    this._fixRepeat();
     this._renderOverlay(true);
   }
 
@@ -883,10 +1010,11 @@ class FoyerMalinPanel extends HTMLElement {
         id: ev.id || null, title: ev.title || "", all_day: Boolean(ev.all_day), members: [...(ev.members || [])],
         startDate: ev.start ? ev.start.slice(0, 10) : date, startTime: ev.start && !ev.all_day ? ev.start.slice(11, 16) : `${pad(hour)}:00`,
         endDate: ev.end ? ev.end.slice(0, 10) : date, endTime: ev.end && !ev.all_day ? ev.end.slice(11, 16) : `${pad(hour + 1)}:00`,
-        location: ev.location || "", notes: ev.notes || "", freq: rec.freq, interval: rec.interval, until: rec.until || "",
+        location: ev.location || "", notes: ev.notes || "", ...this._repeatDraft(rec),
       },
     });
     this.top.prev = { startDate: this.top.draft.startDate, startTime: this.top.draft.startTime };
+    this._fixRepeat();
     this._renderOverlay(true);
   }
 
@@ -938,7 +1066,8 @@ class FoyerMalinPanel extends HTMLElement {
     this._tabChanged = false;
     root.getElementById("header").innerHTML = this._tplHeader();
     const flush = this.s.data && this.s.tab === "lists";
-    main.innerHTML = `<div class="page ${flush ? "flush" : ""}">${this.s.data ? this._tplTab() : `<div class="empty">Chargement…</div>`}</div>`;
+    const hasFab = this.s.data && ["tasks", "agenda"].includes(this.s.tab);
+    main.innerHTML = `<div class="page ${flush ? "flush" : hasFab ? "has-fab" : ""}">${this.s.data ? this._tplTab() : `<div class="empty">Chargement…</div>`}</div>`;
     root.getElementById("fab").innerHTML = this.s.data ? this._tplFab() : "";
     main.scrollTop = scroll;
     if (typing) {
@@ -966,6 +1095,7 @@ class FoyerMalinPanel extends HTMLElement {
       const first = host.querySelector("[data-autofocus]");
       if (first && !first.value) first.focus();
     }
+    this._refreshPreview();
     this._renderToast();
   }
 
@@ -1034,7 +1164,7 @@ class FoyerMalinPanel extends HTMLElement {
     const list = showList && task.list_id ? this._list(task.list_id) : null;
     const meta = [];
     if (task.due) meta.push(`<span class="${isLate(task, today) ? "late" : ""}">${icon("calendar-blank-outline")}${esc(taskWhen(task, today))}</span>`);
-    if (task.recurrence.freq !== "none" && !task.done) meta.push(`<span>${icon("repeat")}${esc(recurrenceLabel(task.recurrence))}</span>`);
+    if (task.recurrence.freq !== "none" && !task.done) meta.push(`<span>${icon("repeat")}${esc(recurrenceLabel(task.recurrence, task.anchor || task.due))}</span>`);
     if (task.rotate && who.length > 1 && !task.done) meta.push(`<span>Au tour de ${esc(who[0].name)}</span>`);
     if (list) meta.push(`<span>${esc(list.emoji)} ${esc(list.name)}</span>`);
     if (task.done && task.done_by && this._member(task.done_by)) meta.push(`<span>Fait par ${esc(this._member(task.done_by).name)}</span>`);
@@ -1131,7 +1261,7 @@ class FoyerMalinPanel extends HTMLElement {
         <button class="icon-btn" data-action="week-next" aria-label="Semaine suivante">${icon("chevron-right")}</button>
       </div>
       ${days.join("")}
-      <div style="text-align:center;margin-top:16px"><button class="btn" data-action="event-new" data-date="${start <= today && today <= end ? today : start}">${icon("plus")} Nouvel événement</button></div>`;
+    `;
   }
 
   /* ---- tâches */
@@ -1158,7 +1288,7 @@ class FoyerMalinPanel extends HTMLElement {
       : "";
     return `${chips}
       <div class="quick"><input class="input" id="task-quick" placeholder="Ajouter une tâche…" data-enter="task-quick" enterkeyhint="done" aria-label="Nouvelle tâche">
-        <button class="btn tonal" data-action="task-new" aria-label="Nouvelle tâche détaillée">${icon("tune-variant")}</button></div>
+        <button class="btn" data-action="task-quick" aria-label="Ajouter la tâche">${icon("plus")}Ajouter</button></div>
       ${groups.map(([label, list, cls]) => `<div class="sec"><h3 class="${cls || ""}">${label} · ${list.length}</h3></div><div class="card flush">${this._tplRows(list, { showList: true })}</div>`).join("")}
       ${!open.length ? `<div class="empty"><span class="big">✨</span>Aucune tâche à faire${filter === "all" ? "" : ` pour ${esc(this._member(filter).name)}`}.</div>` : ""}
       ${done.length ? `<div class="sec"><button class="btn text" data-action="done-toggle">${icon(this.s.showDone ? "chevron-down" : "chevron-right")} Terminées · ${done.length}</button><span class="grow"></span>${this.s.showDone ? `<button class="btn danger" data-action="done-clear">Effacer</button>` : ""}</div>${this.s.showDone ? `<div class="card flush">${this._tplRows(done, { showList: true })}</div>` : ""}` : ""}`;
@@ -1211,6 +1341,8 @@ class FoyerMalinPanel extends HTMLElement {
 
   /* Bouton + flottant : nouvelle liste, ou nouvelle tâche dans la liste ouverte. */
   _tplFab() {
+    if (this.s.tab === "tasks") return `<button class="fab ext" data-action="task-new" aria-label="Nouvelle tâche">${icon("plus")}<span>Nouvelle tâche</span></button>`;
+    if (this.s.tab === "agenda") return `<button class="fab ext" data-action="event-new" aria-label="Nouvel événement">${icon("plus")}<span>Événement</span></button>`;
     if (this.s.tab !== "lists") return "";
     const list = this._list(this.s.listId);
     if (list) return `<button class="fab" style="--lc:${this._listColor(list)}" data-action="task-new" aria-label="Nouvelle tâche">${icon("plus")}</button>`;
@@ -1266,13 +1398,44 @@ class FoyerMalinPanel extends HTMLElement {
   }
 
   _tplRepeat(f) {
-    const unit = f.freq !== "none" ? FREQ_UNITS[f.freq][Number(f.interval) > 1 ? 1 : 0] : "";
-    return `<div class="${f.freq === "none" ? "" : "two repeat"}">
+    const start = this._repeatStart(f);
+    const n = Number(f.interval) || 1;
+    const none = f.freq === "none";
+    const unit = none ? "" : FREQ_UNITS[f.freq][n > 1 ? 1 : 0];
+    const day = parseIso(start);
+    const nth = Math.floor((day.getDate() - 1) / 7);
+    const monday = addDays(start, -weekdayOf(start));
+    const modes = [
+      ["day", `Le ${day.getDate()} de chaque mois`],
+      ["nth_weekday", `Le ${NTH[nth]} ${WD_FULL[weekdayOf(start)]} du mois${nth === 4 ? " (sinon le dernier)" : ""}`],
+      ["last_weekday", `Le dernier ${WD_FULL[weekdayOf(start)]} du mois`],
+      ["last_day", "Le dernier jour du mois"],
+    ];
+    return `<div class="repeat-box">
       <label class="field"><span>Répétition</span><select class="input" data-path="top.draft.freq" data-refresh>${Object.entries(FREQ_LABELS)
         .map(([key, label]) => `<option value="${key}" ${f.freq === key ? "selected" : ""}>${label}</option>`)
         .join("")}</select></label>
-      ${f.freq === "none" ? "" : `<label class="field"><span>Tous les… (${unit})</span><input class="input" type="number" min="1" max="99" inputmode="numeric" data-path="top.draft.interval" data-refresh value="${esc(f.interval)}"></label>`}
+      ${none ? "" : `<div class="every"><span>${f.freq === "weekly" ? "Toutes" : "Tous"} les</span>
+          <input class="input" type="number" min="1" max="99" inputmode="numeric" data-path="top.draft.interval" data-refresh value="${esc(f.interval)}" aria-label="Intervalle"><span>${unit}</span></div>
+        ${f.freq === "weekly" ? `<div class="field-label">Les jours</div>
+          <div class="chips tight days">${WD_SHORT.map((label, i) => `<button class="chip day ${f.weekdays.includes(i) ? "on" : ""}" data-action="pick-day" data-value="${i}" aria-pressed="${f.weekdays.includes(i)}" aria-label="${WD_FULL[i]}">${label}</button>`).join("")}</div>` : ""}
+        ${f.freq === "weekly" && n > 1 && n <= 12 ? `<div class="field-label">Semaines du cycle de ${n} semaines</div>
+          <div class="chips tight">${Array.from({ length: n }, (_, i) => `<button class="chip ${f.weeks.includes(i) ? "on" : ""}" data-action="pick-week" data-value="${i}" aria-pressed="${f.weeks.includes(i)}">Semaine ${i + 1}</button>`).join("")}</div>
+          <p class="hint">La semaine 1 est celle du ${esc(fmtDay(monday, { weekday: "long", day: "numeric", month: "long" }))}. Cochez les semaines où cela a lieu : « 1 semaine sur 2 », « 2 semaines sur 3 »…</p>` : ""}
+        ${f.freq === "monthly" ? `<label class="field"><span>Quel jour ?</span><select class="input" data-path="top.draft.month_mode" data-refresh>${modes
+          .map(([key, label]) => `<option value="${key}" ${f.month_mode === key ? "selected" : ""}>${esc(label)}</option>`)
+          .join("")}</select></label>` : ""}
+        <label class="field"><span>Jusqu'au (facultatif : sans fin)</span><input class="input" type="date" data-path="top.draft.until" data-refresh value="${esc(f.until)}"></label>
+        <div class="summary" id="repeat-preview">${this._tplRepeatSummary(this.top)}</div>`}
     </div>`;
+  }
+
+  _tplRepeatSummary(top) {
+    const f = top.draft;
+    if (f.freq === "none") return "";
+    const start = this._repeatStart(f);
+    const dates = (top.preview || []).map((iso) => fmtDay(iso, { weekday: "short", day: "numeric", month: "short" }));
+    return `🔁 ${esc(describeRecurrence(this._recurrenceOf(f), start))}${dates.length ? `<span class="next">Prochaines dates : ${esc(dates.join(" · "))}</span>` : ""}`;
   }
 
   _tplTaskForm(f) {
@@ -1288,7 +1451,7 @@ class FoyerMalinPanel extends HTMLElement {
         .map((l) => `<option value="${l.id}" ${l.id === f.list_id ? "selected" : ""}>${esc(l.emoji)} ${esc(l.name)}</option>`)
         .join("")}</select></label>
       ${this._tplRepeat(f)}
-      ${f.freq !== "none" ? `<p class="hint">Une fois faite, la tâche revient à sa prochaine date.</p>` : ""}
+      ${f.freq !== "none" ? `<p class="hint" style="margin-top:-8px">Une fois faite, la tâche revient à sa prochaine date.</p>` : ""}
       ${f.freq !== "none" && several ? `<div class="switch" style="margin-bottom:8px"><div class="grow"><div>Chacun son tour</div><div class="sub">La tâche passe au membre suivant à chaque fois.</div></div><button class="toggle ${f.rotate ? "on" : ""}" data-action="flip" data-field="rotate" role="switch" aria-checked="${Boolean(f.rotate)}" aria-label="Chacun son tour"></button></div>` : ""}
       ${this.s.data.settings.points ? `<div class="switch" style="margin-bottom:8px"><div class="grow">Points gagnés</div><span class="stepper">
         <button class="icon-btn" data-action="step" data-field="points" data-delta="-1" data-min="0" data-max="20" aria-label="Moins de points">${icon("minus")}</button><b>${f.points}</b>
@@ -1307,7 +1470,7 @@ class FoyerMalinPanel extends HTMLElement {
       ${this._tplMemberChips("members", f.members)}
       <label class="field"><span>Lieu</span><input class="input" data-path="top.draft.location" value="${esc(f.location)}" maxlength="200"></label>
       ${this._tplRepeat(f)}
-      ${f.freq !== "none" ? `<label class="field"><span>Jusqu'au (laisser vide : sans fin)</span><input class="input" type="date" data-path="top.draft.until" value="${esc(f.until)}"></label>${f.id ? `<p class="hint">Les changements s'appliquent à toutes les répétitions.</p>` : ""}` : ""}
+      ${f.freq !== "none" && f.id ? `<p class="hint" style="margin-top:-8px">Les changements s'appliquent à toutes les répétitions.</p>` : ""}
       <label class="field"><span>Note</span><textarea class="input" data-path="top.draft.notes" maxlength="1000">${esc(f.notes)}</textarea></label>`;
   }
 

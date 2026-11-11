@@ -73,3 +73,23 @@ async def test_events_lists_and_settings(hass, entry, hass_ws_client):
     settings = (await call(client, "settings/save", settings={"reminder_time": "7:05"}))["result"]["settings"]
     assert settings == {"reminder": True, "reminder_time": "07:05", "points": True}
     assert (await call(client, "reminder/test"))["result"] == {"sent": 0}
+
+
+async def test_recurrence_preview_and_custom_cycle(hass, entry, store, hass_ws_client):
+    client = await hass_ws_client(hass)
+    cycle = {"freq": "weekly", "interval": 2, "weekdays": [0, 3]}
+    preview = await call(client, "recurrence/preview", start="2026-11-23", recurrence=cycle, count=4)
+    assert preview["result"]["dates"] == ["2026-11-23", "2026-11-26", "2026-12-07", "2026-12-10"]
+    assert (await call(client, "recurrence/preview", start="pas une date", recurrence=cycle))["error"]["code"] == "invalid_format"
+    assert not (await call(client, "recurrence/preview", start="2026-11-23", recurrence={"freq": "weekly", "weekdays": [9]}))["success"]
+
+    saved = (await call(client, "tasks/save", task={"title": "Ménage", "due": "2026-11-23", "recurrence": cycle}))["result"]["task"]
+    assert saved["recurrence"]["weekdays"] == [0, 3] and saved["anchor"] == "2026-11-23"
+    # Faite le lundi : prochaine occurrence le jeudi de la même semaine, puis la semaine d'après est sautée.
+    done = (await call(client, "tasks/complete", task_id=saved["id"]))["result"]["task"]
+    assert done["due"] == "2026-11-26" and done["anchor"] == "2026-11-23"
+    done = (await call(client, "tasks/complete", task_id=saved["id"]))["result"]["task"]
+    assert done["due"] == "2026-12-07"
+    # Modifier la répétition repart de la date affichée.
+    edited = (await call(client, "tasks/save", task={"id": saved["id"], "title": "Ménage", "recurrence": {"freq": "weekly", "interval": 3}}))["result"]["task"]
+    assert edited["anchor"] == "2026-12-07"

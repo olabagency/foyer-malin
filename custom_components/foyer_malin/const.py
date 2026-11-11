@@ -4,7 +4,7 @@ from __future__ import annotations
 
 DOMAIN = "foyer_malin"
 # Version de l'intégration. Ne pas modifier à la main : utiliser scripts/bump_version.py.
-VERSION = "0.3.0"
+VERSION = "0.4.0"
 
 # Panneau
 PANEL_URL_PATH = "foyer-malin"
@@ -25,6 +25,8 @@ CHANGELOG_URL = "https://github.com/olabagency/foyer-malin/blob/main/CHANGELOG.m
 
 # Répétition d'une tâche ou d'un événement.
 FREQUENCIES = ["none", "daily", "weekly", "monthly", "yearly"]
+# Répétition mensuelle : le 15, le 2e mardi, le dernier mardi, le dernier jour du mois.
+MONTH_MODES = ["day", "nth_weekday", "last_weekday", "last_day"]
 
 # Couleurs proposées pour les membres du foyer.
 MEMBER_COLORS = ["#e5484d", "#f76b15", "#ffb224", "#30a46c", "#12a594", "#0091ff", "#6e56cf", "#d6409f"]
