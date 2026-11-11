@@ -67,7 +67,9 @@ Les adultes reçoivent aussi les tâches attribuées à personne.
 | `sensor.foyer_malin_taches_du_jour` | Nombre de tâches à faire aujourd'hui, retards compris (détail dans les attributs). |
 | `sensor.foyer_malin_prochain_evenement` | Titre du prochain événement (date, heure, lieu et membres dans les attributs). |
 
-**Carte de tableau de bord** : Modifier le tableau de bord → Ajouter une carte → « Foyer Malin – Aujourd'hui en famille ».
+| `sensor.foyer_malin_classement_du_mois` | Le membre qui a le plus de points ce mois-ci ; le classement du mois et de la semaine est dans les attributs. |
+
+Les cartes de tableau de bord sont décrites plus bas.
 
 Exemple d'automatisation — ajouter une tâche depuis n'importe où :
 
@@ -78,6 +80,58 @@ target:
 data:
   item: Sortir les poubelles
   due_date: "2026-11-12"
+```
+
+## Widgets du tableau de bord
+
+Modifier le tableau de bord → Ajouter une carte → cherchez « Foyer Malin ». Chaque carte a son éditeur visuel, et se règle aussi en YAML. Elles se mettent à jour en direct et on peut cocher une tâche directement depuis la carte. Toucher le titre ouvre Foyer Malin à la bonne page.
+
+| Carte | Type YAML | Ce qu'elle montre |
+| --- | --- | --- |
+| Tâches du jour | `custom:foyer-malin-tasks-card` | Les tâches à faire, retards en rouge, à cocher. |
+| Top points du mois | `custom:foyer-malin-ranking-card` | Le classement des points, avec médailles. |
+| Agenda | `custom:foyer-malin-agenda-card` | Les événements des prochains jours. |
+| Une liste | `custom:foyer-malin-list-card` | Les tâches d'une liste, avec un champ « Ajouter ». |
+| La famille | `custom:foyer-malin-members-card` | Chaque membre : tâches du jour et points du mois. |
+| Aujourd'hui en famille | `custom:foyer-malin-card` | Le prochain événement et les tâches du jour (utilise les capteurs). |
+
+**Options des cartes**
+
+| Carte | Option | Rôle | Défaut |
+| --- | --- | --- | --- |
+| Tâches | `title` | Titre | « Tâches du jour » |
+| | `member` | Prénom du membre, ou `me` pour la personne connectée | toute la famille |
+| | `list` | Nom d'une liste | toutes |
+| | `scope` | `today` (aujourd'hui et retards), `week` (7 jours) ou `all` | `today` |
+| | `max_tasks` | Nombre maximum de tâches | 6 |
+| | `show_list` | Afficher le nom de la liste | `true` |
+| Classement | `title` | Titre | « Top points du mois » |
+| | `period` | `month` ou `week` | `month` |
+| | `show_count` | Afficher le nombre de tâches faites | `true` |
+| Agenda | `title`, `member` | Titre, membre concerné | |
+| | `days` | Nombre de jours (1 à 14) | 5 |
+| | `max_events` | Nombre maximum d'événements | 8 |
+| Une liste | `list` | Nom de la liste (obligatoire) | |
+| | `title`, `max_tasks` | Titre, nombre de tâches | 8 |
+| | `show_add` | Champ « Ajouter une tâche » | `true` |
+| La famille | `title` | Titre | « Famille » |
+| | `show_points` | Afficher les points du mois | `true` |
+
+Un tableau de bord par personne : avec `member: me`, la même carte montre à chacun ses propres tâches (la personne Home Assistant du membre doit être choisie dans son profil).
+
+```yaml
+type: grid
+columns: 2
+cards:
+  - type: custom:foyer-malin-tasks-card
+    member: me
+    title: Mes tâches
+  - type: custom:foyer-malin-ranking-card
+    period: month
+  - type: custom:foyer-malin-agenda-card
+    days: 7
+  - type: custom:foyer-malin-list-card
+    list: Jardin
 ```
 
 ## Vos données
@@ -113,9 +167,9 @@ custom_components/foyer_malin/
 ├── websocket_api.py   commandes utilisées par le panneau
 ├── calendar.py        agenda
 ├── todo.py            liste des tâches
-├── sensor.py          tâches du jour, prochain événement
+├── sensor.py          tâches du jour, prochain événement, classement du mois
 ├── reminder.py        rappel quotidien sur les téléphones
-└── frontend/          panneau et carte (JavaScript sans build)
+└── frontend/          panneau et widgets (JavaScript sans build)
 ```
 
 ## Licence

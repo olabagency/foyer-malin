@@ -7,6 +7,19 @@ Toutes les évolutions notables sont listées ici. Les numéros de version suive
 - **mineure** (1.**1**.0) : nouvelles fonctions, vos données et réglages sont conservés ;
 - **majeure** (**2**.0.0) : changement important, lisez les notes avant de mettre à jour.
 
+## [0.3.0] – 2026-11-11
+
+### Ajouté
+
+- 🧩 **Cinq widgets pour le tableau de bord**, à ajouter par Modifier le tableau de bord → Ajouter une carte → « Foyer Malin – … » (éditeur visuel inclus).
+  - **Tâches du jour** : les tâches à faire aujourd'hui, retards en rouge, à cocher directement. Pour toute la famille, un membre (ou `me` : la personne connectée) ou une liste ; aujourd'hui, 7 jours ou tout.
+  - **Top points du mois** : le classement avec médailles, du mois ou de la semaine.
+  - **Agenda** : les événements des prochains jours, jour par jour.
+  - **Une liste** : les tâches d'une liste (jardin, ménage…), à la couleur de la liste, avec un champ pour en ajouter.
+  - **La famille** : chaque membre avec ses tâches du jour et ses points du mois.
+  - Ils se mettent à jour en direct, comme le panneau, et un tableau de bord par personne est possible.
+- 🏆 Capteur `sensor.foyer_malin_classement_du_mois` : le leader du mois, avec le classement du mois et de la semaine en attributs (annonce vocale, automatisation).
+
 ## [0.2.0] – 2026-11-10
 
 ### Modifié

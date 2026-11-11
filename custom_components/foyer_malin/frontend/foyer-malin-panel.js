@@ -4,7 +4,7 @@
  * Les couleurs viennent du thème de Home Assistant (clair ou sombre).
  */
 
-const FOYER_VERSION = "0.2.0";
+const FOYER_VERSION = "0.3.0";
 
 /* ------------------------------------------------------------------ outils */
 

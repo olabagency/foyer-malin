@@ -4,7 +4,7 @@ from __future__ import annotations
 
 DOMAIN = "foyer_malin"
 # Version de l'intégration. Ne pas modifier à la main : utiliser scripts/bump_version.py.
-VERSION = "0.2.0"
+VERSION = "0.3.0"
 
 # Panneau
 PANEL_URL_PATH = "foyer-malin"

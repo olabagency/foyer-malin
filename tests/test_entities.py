@@ -111,3 +111,24 @@ async def test_reminder_reaches_the_right_phones(hass, entry, store):
     # Sa tâche, plus celle de personne (elle est adulte) ; rien pour Tom, qui n'a rien aujourd'hui.
     assert calls[0].data["message"] == "Courrier, Poubelles (1 en retard)"
     assert calls[0].data["data"]["url"] == f"/foyer-malin?tab=tasks&member={lea['id']}"
+
+
+async def test_month_ranking_sensor(hass, entry, store):
+    sensor = "sensor.foyer_malin_classement_du_mois"
+    assert hass.states.get(sensor).state == "Personne"
+
+    lea = store.save_member({"name": "Léa"})
+    tom = store.save_member({"name": "Tom"})
+    for title, who, points in (("A", lea, 2), ("B", tom, 5), ("C", tom, 1)):
+        task = store.save_task({"title": title, "assignees": [who["id"]], "points": points})
+        store.complete_task(task["id"])
+    # Une tâche du mois dernier ne compte plus.
+    store.history.append({"id": "old", "task_id": "x", "title": "Vieille", "member_id": lea["id"], "points": 50, "at": "2020-01-01T10:00:00+00:00"})
+    await hass.async_block_till_done()
+
+    state = hass.states.get(sensor)
+    assert state.state == "Tom"
+    assert state.attributes["points"] == 6
+    assert [(r["name"], r["points"], r["count"]) for r in state.attributes["ranking"]] == [("Tom", 6, 2), ("Léa", 2, 1)]
+    assert [r["name"] for r in state.attributes["week_ranking"]] == ["Tom", "Léa"]
+    assert store.snapshot()["scores_month"][tom["id"]] == {"points": 6, "count": 2}

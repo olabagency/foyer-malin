@@ -1,4 +1,4 @@
-"""Capteurs de Foyer Malin : les tâches du jour et le prochain événement.
+"""Capteurs de Foyer Malin : tâches du jour, prochain événement, classement du mois.
 
 Utilisés par la carte de tableau de bord, et disponibles pour vos automatisations
 (par exemple une annonce vocale « Il reste 3 tâches aujourd'hui » à 18 h).
@@ -55,7 +55,7 @@ def next_event(store: FoyerStore, now: datetime) -> dict[str, Any] | None:
 async def async_setup_entry(
     hass: HomeAssistant, entry: FoyerConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
-    async_add_entities([TasksTodaySensor(entry), NextEventSensor(entry)])
+    async_add_entities([TasksTodaySensor(entry), NextEventSensor(entry), MonthRankingSensor(entry)])
 
 
 class _FoyerSensor(SensorEntity):
@@ -153,4 +153,31 @@ class NextEventSensor(_FoyerSensor):
             "location": occ["location"],
             "event_id": occ["id"],
             "url": url,
+        }
+
+
+class MonthRankingSensor(_FoyerSensor):
+    """Le membre qui a le plus de points ce mois-ci, et le classement complet en attribut."""
+
+    _attr_icon = "mdi:trophy"
+    _attr_name = "Foyer Malin classement du mois"
+
+    def __init__(self, entry: FoyerConfigEntry) -> None:
+        super().__init__(entry)
+        self._attr_unique_id = f"{entry.entry_id}_month_ranking"
+        self._attr_suggested_object_id = "foyer_malin_classement_du_mois"
+
+    @callback
+    def _update(self) -> None:
+        today = dt_util.now().date()
+        month = self._store.ranking(today.replace(day=1))
+        week = self._store.ranking(today - timedelta(days=today.weekday()))
+        leader = month[0] if month and month[0]["points"] > 0 else None
+        self._attr_native_value = leader["name"] if leader else "Personne"
+        self._attr_extra_state_attributes = {
+            "points": leader["points"] if leader else 0,
+            "month": today.strftime("%Y-%m"),
+            "ranking": month,
+            "week_ranking": week,
+            "url": f"/{PANEL_URL_PATH}?tab=home",
         }

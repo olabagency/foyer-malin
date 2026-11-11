@@ -159,6 +159,7 @@ class FoyerStore:
             "lists": list(self.lists.values()),
             "settings": self.settings,
             "scores": self.scores(today - timedelta(days=today.weekday())),
+            "scores_month": self.scores(today.replace(day=1)),
             "today": today.isoformat(),
         }
 
@@ -332,6 +333,22 @@ class FoyerStore:
                 totals[member_id]["points"] += entry.get("points", 0)
                 totals[member_id]["count"] += 1
         return totals
+
+    def ranking(self, since: date) -> list[dict[str, Any]]:
+        """Classement des membres depuis une date : le plus de points d'abord, puis le plus de tâches."""
+        totals = self.scores(since)
+        rows = [
+            {
+                "id": m["id"],
+                "name": m["name"],
+                "emoji": m["emoji"],
+                "color": m["color"],
+                "points": totals[m["id"]]["points"],
+                "count": totals[m["id"]]["count"],
+            }
+            for m in self.members.values()
+        ]
+        return sorted(rows, key=lambda r: (-r["points"], -r["count"], r["name"].lower()))
 
     # ------------------------------------------------------------------ agenda
 
